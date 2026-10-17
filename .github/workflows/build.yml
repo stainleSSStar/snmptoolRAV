@@ -1,0 +1,48 @@
+name: Build and validate portable SNMP tool
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test against local simulated SNMP agents
+        shell: powershell
+        run: ./build.ps1 -Test
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build portable release and Windows previews
+        shell: powershell
+        run: |
+          ./build.ps1 -Test
+          Compress-Archive -Path dist/* -DestinationPath snmptoolRAV-portable.zip
+      - name: Prepare reviewable draft with portable downloads
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets=@('snmptoolRAV-portable.zip','dist/snmptoolRAV.exe','dist/SHA256SUMS.txt')+@(Get-ChildItem dist/ui-previews/*.png | ForEach-Object FullName)
+          $draft=gh release view $env:GITHUB_REF_NAME --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if ($draft -ne 'true') { throw 'Refusing to overwrite a published release.' }
+            gh release upload $env:GITHUB_REF_NAME @assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Draft asset update failed.' }
+            gh release edit $env:GITHUB_REF_NAME --title "snmptoolRAV $env:GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          } else {
+            gh release create $env:GITHUB_REF_NAME --draft @assets --title "snmptoolRAV $env:GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Release preparation failed.' }
