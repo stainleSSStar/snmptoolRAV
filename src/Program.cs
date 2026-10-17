@@ -49,6 +49,9 @@ namespace SnmptoolRAV {
         readonly List<DeviceResult> results = new List<DeviceResult>();
         readonly List<DataRow> values = new List<DataRow>();
         readonly Card settings;
+        readonly TableLayoutPanel root;
+        readonly LinkLabel connectionToggle = new LinkLabel { Text="Hide connection settings", Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleRight, LinkColor=Theme.Accent, ActiveLinkColor=Theme.Accent, AccessibleName="Show or hide connection settings" };
+        bool settingsVisible=true;
         readonly bool preview;
         CancellationTokenSource cancellation;
         bool busy,closing;
@@ -69,11 +72,11 @@ namespace SnmptoolRAV {
             preview=forPreview; Text="snmptoolRAV - Network device discovery"; Font=new Font("Segoe UI",10); BackColor=Theme.Background; ForeColor=Theme.Text;
             Icon=System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); AutoScaleDimensions=new SizeF(96,96); AutoScaleMode=AutoScaleMode.Dpi;
             ClientSize=new Size(1080,720); MinimumSize=new Size(960,700); StartPosition=FormStartPosition.CenterScreen;
-            var root=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=1, RowCount=6, Padding=new Padding(22), BackColor=Theme.Background };
+            root=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=1, RowCount=6, Padding=new Padding(22), BackColor=Theme.Background };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
             foreach (var style in new[] {new RowStyle(SizeType.Absolute,64),new RowStyle(SizeType.Absolute,224),new RowStyle(SizeType.Absolute,56),new RowStyle(SizeType.Percent,100),new RowStyle(SizeType.Absolute,8),new RowStyle(SizeType.Absolute,44)}) root.RowStyles.Add(style);
             var header=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, Margin=new Padding(0) }; header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
-            header.Controls.Add(TextLabel("snmptoolRAV",23,true),0,0); var tagline=TextLabel("PORTABLE  /  READ-ONLY SNMP",9,true); tagline.TextAlign=ContentAlignment.MiddleRight; header.Controls.Add(tagline,1,0); root.Controls.Add(header,0,0);
+            header.Controls.Add(TextLabel("snmptoolRAV",23,true),0,0); header.Controls.Add(connectionToggle,1,0); root.Controls.Add(header,0,0);
             settings=new Card { Dock=DockStyle.Fill, Margin=new Padding(0,0,0,12), Padding=new Padding(18,12,18,12) };
             var fields=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=6, RowCount=6, Margin=new Padding(0), BackColor=Theme.Surface };
             foreach (float width in new[] {28f,23f,17f,10f,12f,10f}) fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,width));
@@ -99,21 +102,24 @@ namespace SnmptoolRAV {
             preset.Items.AddRange(new object[] {"System information","Printer MIB","Host devices","Standard MIB-II","Custom OID"}); preset.SelectedIndex=0; oid.Text="1.3.6.1.2.1.1"; readData.Dock=DockStyle.Fill; readData.Margin=new Padding(0,0,0,7); query.Controls.Add(preset,0,0); query.Controls.Add(oid,1,0); query.Controls.Add(readData,2,0); details.Controls.Add(query,0,1); details.Controls.Add(data,0,2); details.Controls.Add(value,0,3); dataTab.Controls.Add(details);
             tabs.TabPages.AddRange(new[] {deviceTab,dataTab}); root.Controls.Add(tabs,0,3); root.Controls.Add(progress,0,4); root.Controls.Add(status,0,5); Controls.Add(root);
             adapter.SelectedIndexChanged+=delegate { AdapterChanged(); };
-            devices.SelectionChanged+=delegate { var item=CurrentDevice(); selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name); SetBusy(busy); };
+            devices.SelectionChanged+=delegate {UpdateSelected();};
             devices.SortCompare+=delegate(object sender,DataGridViewSortCompareEventArgs e) { if (e.Column.Index==0) { e.SortResult=IpRange.Number(IPAddress.Parse(Convert.ToString(e.CellValue1))).CompareTo(IpRange.Number(IPAddress.Parse(Convert.ToString(e.CellValue2)))); e.Handled=true; } };
             data.SelectionChanged+=delegate { value.Text=data.SelectedRows.Count==0?"":Convert.ToString(data.SelectedRows[0].Cells[3].Value); };
             preset.SelectedIndexChanged+=delegate { string[] roots={"1.3.6.1.2.1.1","1.3.6.1.2.1.43","1.3.6.1.2.1.25.3","1.3.6.1.2.1"}; if (preset.SelectedIndex<roots.Length) oid.Text=roots[preset.SelectedIndex]; };
             start.Click+=async delegate {await Scan();}; stop.Click+=delegate {if(cancellation!=null)cancellation.Cancel();}; refresh.Click+=delegate {LoadAdapters();};
             read.Click+=async delegate {tabs.SelectedTab=dataTab;await ReadData();}; readData.Click+=async delegate {await ReadData();}; export.Click+=delegate {ExportCsv();};
-            tabs.SelectedIndexChanged+=delegate {SetBusy(busy);};
+            connectionToggle.LinkClicked+=delegate {SetSettingsVisible(!settingsVisible);};
+            tabs.SelectedIndexChanged+=delegate {SetSettingsVisible(tabs.SelectedTab==deviceTab);SetBusy(busy);};
             if(!preview) Shown+=delegate {LoadAdapters();};
             FormClosing+=delegate(object sender,FormClosingEventArgs e) {if(busy){e.Cancel=true;closing=true;if(cancellation!=null)cancellation.Cancel();SetStatus("Stopping network requests...",false);}};
             SetBusy(false);
         }
+        void SetSettingsVisible(bool visible) {settingsVisible=visible;settings.Visible=visible;root.RowStyles[1].Height=visible?224:0;connectionToggle.Text=visible?"Hide connection settings":"Show connection settings";root.PerformLayout();}
+        void UpdateSelected() {var item=CurrentDevice();selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name)+"  /  "+item.VersionText;SetBusy(busy);}
         DeviceResult CurrentDevice() {return devices.SelectedRows.Count==0?null:devices.SelectedRows[0].Tag as DeviceResult;}
         void SetStatus(string text,bool success) {status.Text=text;status.ForeColor=success?Theme.Success:Theme.Muted;tips.SetToolTip(status,text);}
         void SetBusy(bool valueBusy) {
-            busy=valueBusy;settings.Enabled=refresh.Enabled=start.Enabled=!busy;stop.Enabled=busy;
+            busy=valueBusy;progress.Visible=busy;settings.Enabled=refresh.Enabled=start.Enabled=!busy;stop.Enabled=busy;
             read.Enabled=readData.Enabled=!busy&&CurrentDevice()!=null; preset.Enabled=oid.Enabled=!busy;
             export.Enabled=!busy&&(tabs.SelectedTab==dataTab?values.Count>0:results.Count>0);
         }
@@ -134,7 +140,7 @@ namespace SnmptoolRAV {
             var options=new ScanOptions {Adapter=item,Range=IpRange.Parse(range.Text,item,routed.Checked),Community=community.Text,Version=version.SelectedIndex==0?-1:version.SelectedIndex==1?1:0,Port=(int)port.Value,Timeout=(int)timeout.Value,Retries=(int)retries.Value};options.Validate();return options;
         }
         void Error(Exception ex) {SetStatus("Operation could not finish: "+ex.Message,false);MessageBox.Show(this,ex.Message,"snmptoolRAV",MessageBoxButtons.OK,MessageBoxIcon.Error);}
-        void AddDevice(DeviceResult item) {if(IsDisposed)return;results.Add(item);int index=devices.Rows.Add(item.IP,item.Name,item.Description,item.VersionText,item.Status);devices.Rows[index].Tag=item;deviceTab.Text="Devices ("+results.Count+")";}
+        void AddDevice(DeviceResult item) {if(IsDisposed)return;results.Add(item);int index=devices.Rows.Add(item.IP,item.Name,item.Description,item.VersionText,item.Status);devices.Rows[index].Tag=item;deviceTab.Text="Devices ("+results.Count+")";UpdateSelected();}
         void AddValue(DataRow row) {if(IsDisposed)return;values.Add(row);data.Rows.Add(row.Oid,row.Name,row.Type,row.Value);}
         async Task Scan() {
             ScanOptions options;try {options=Options();}catch(Exception ex){Error(ex);return;}

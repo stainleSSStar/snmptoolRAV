@@ -19,7 +19,7 @@ Discovery is bounded to 24 concurrent workers, with a configurable reply timeout
 
 ## Read device data
 
-Select a discovered device, then click **Read selected device**. In **Device data**, choose a subtree and click **Read data**:
+Select a discovered device, then click **Read selected device**. Connection settings collapse automatically in the data tab to give the table more space; use **Show connection settings** at the top to change the community, version or adapter. In **Device data**, choose a subtree and click **Read data**:
 
 | Preset | Numeric subtree | Typical data |
 | --- | --- | --- |
