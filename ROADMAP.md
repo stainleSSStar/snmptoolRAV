@@ -1,15 +1,18 @@
-# Next phase: SNMPv3
+# Phase 2: SNMPv3
 
-Requested by the repository owner after the initial v1/v2c scanner specification. SNMPv3 is not implemented in v1.0.
+Implemented in the v1.1 release:
 
-Add a separate SNMPv3 profile, preserving the adapter dropdown, subnet controls and read-only discovery/data workflows:
+- Separate in-memory v3 profile: username, context, noAuthNoPriv/authNoPriv/authPriv.
+- SHA-256 (default), SHA-384, SHA-512 and explicit SHA-1 legacy authentication.
+- AES-128 privacy with a separate passphrase.
+- Maintained SharpSNMP library, pinned to stable 12.5.7 and embedded in the portable EXE.
+- Engine-ID discovery, digest/decryption validation, context/request matching, engine time checks and one bounded rediscovery/resynchronization attempt.
+- No fallback to community protocols or weaker security settings.
+- Windows mock-agent tests and independent Net-SNMP interoperability checks on loopback.
 
-- Username, context name and security level: noAuthNoPriv, authNoPriv or authPriv.
-- Authentication protocol/password and privacy protocol/password shown only when needed.
-- Implement agent engine-ID discovery, authenticated message checks, engine boots/time synchronization and time-window errors using a maintained SNMPv3 implementation.
-- Verify supported SHA/AES algorithms against that implementation and real target devices before offering them in the UI.
-- Do not silently fall back from a v3 profile to community-based versions or weaker authentication/privacy settings.
-- Keep secrets in memory by default and out of exports/logs. Add profile persistence only with an explicit protected-storage design.
-- Test discovery, reads, authentication/privacy failures, invalid credentials, engine time resynchronization, cancellation and virtual-adapter source selection against local v3 agents; then validate on the owner's devices.
+Remaining device validation:
 
-Keep the app portable. Reassess packaging if a maintained protocol library requires a newer self-contained .NET runtime rather than the current framework-only EXE.
+- Check the owner's physical printers and other v3 agents, including VPN/virtual-adapter routes.
+- Confirm each device's configured authentication/privacy algorithms and context before testing.
+
+Possible future work (not part of this release): additional privacy protocols if required by target hardware, protected profile persistence, IPv6 discovery and vendor MIB imports.

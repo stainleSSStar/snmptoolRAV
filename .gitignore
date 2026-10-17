@@ -3,3 +3,5 @@ ui-review/
 *.csv
 *.zip
 .build/
+**/bin/
+**/obj/

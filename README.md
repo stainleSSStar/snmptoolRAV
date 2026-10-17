@@ -1,6 +1,6 @@
 # snmptoolRAV
 
-Portable Windows SNMP discovery and device-data reader. Choose a configured IPv4 adapter, enter a community name, and scan its subnet for SNMP devices such as printers, switches and storage appliances.
+Portable Windows SNMP discovery and device-data reader. Choose a configured IPv4 adapter, enter a community or SNMPv3 profile, and scan its subnet for SNMP devices such as printers, switches and storage appliances.
 
 ## Download and run
 
@@ -9,13 +9,31 @@ Download `snmptoolRAV.exe` from [Releases](https://github.com/stainleSSStar/snmp
 1. Choose **Network adapter / IPv4 address**. Every configured IPv4 address is listed, including addresses on virtual, VPN, Hyper-V, VMware and other interfaces exposed by Windows. Disconnected entries remain visible; an adapter must be up before scanning. Multiple addresses on an adapter appear separately.
 2. Check **IPv4 subnet (CIDR)**. The app starts with the selected address and its prefix, narrowed to `/24` when the configured subnet is broader. The scan is normalized to the actual network boundary. You may narrow the range or scan a larger part of that adapter's configured subnet, up to `/16` (65,534 hosts). For VPNs with `/32` addressing or other routed networks, explicitly enable **Routed / VPN subnet** to scan a CIDR outside the directly configured subnet through the selected adapter; Windows must have a usable route for it. Use `/32` to query one address. IPv6 discovery is not included in this release.
 3. Enter **Community**. It is masked by default; **Show** reveals it. The app does not save it in configuration files, CSV exports, logs or release assets. Community-based SNMP v1/v2c transmits this name unencrypted on the selected network.
-4. Leave **Version** on **Auto** to try v2c, then v1 only if no matching response arrives, or explicitly choose either version. SNMPv3 is planned as a separate authentication profile; see [ROADMAP.md](ROADMAP.md).
+4. Leave **Version** on **Auto** to try v2c, then v1 only if no matching response arrives, or explicitly choose either version. Select **SNMP v3** for a separate username/authentication/privacy profile. Auto tries only community-based v2c/v1; it never attempts or falls back from v3.
 5. Leave **UDP port** at 161 unless your device uses another port. Adjust reply timeout (100–5,000 ms) and retries (0–2 per version during discovery) if needed.
 6. Click **Scan subnet**. Requests are sent only after you click; starting the app only reads local adapter configuration. **Stop** cancels outstanding polling and preserves discovered devices.
 
-The app sends read-only SNMP GET/GETNEXT requests. It does not change device settings, use SET requests, select additional subnets automatically, require ping replies, change routes or install services. IPv4 packets are bound to the selected source address and Windows `IP_UNICAST_IF` interface index. A binding failure is shown rather than silently switching to another adapter. Routing/firewall restrictions on a virtual interface may still prevent access to devices.
+The app sends read-only SNMP GET/GETNEXT requests, plus SNMPv3 engine discovery. It does not change device settings, use SET requests, select additional subnets automatically, require ping replies, change routes or install services. IPv4 packets are bound to the selected source address and Windows `IP_UNICAST_IF` interface index. A binding failure is shown rather than silently switching to another adapter. Routing/firewall restrictions on a virtual interface may still prevent access to devices.
 
-Discovery is bounded to 24 concurrent workers, with a configurable reply timeout and retry count. Network/broadcast addresses are skipped for `/16`–`/30`; both addresses are usable for `/31`. Scan progress reports checked addresses, SNMP responders and network/response errors. Only devices that return a matching SNMP response appear in the results.
+Discovery is bounded to 24 concurrent workers, with a configurable reply timeout and retry count. In v3 mode a probe can include engine discovery and a profile request. Network/broadcast addresses are skipped for `/16`–`/30`; both addresses are usable for `/31`. Scan progress reports checked addresses, SNMP responders and network/response/profile errors. Only devices that return a matching SNMP response appear in the results.
+
+## SNMPv3 profiles
+
+Choose **SNMP v3** in Version, then **Configure v3...**. The community field is replaced by a profile button. Match your device's settings:
+
+- **Username**: 1–32 UTF-8 bytes. **Context name** is optional (up to 32 UTF-8 bytes); leave it empty for the device's default context.
+- **noAuthNoPriv**: username, without message authentication or encryption.
+- **authNoPriv**: username and authentication passphrase; values are authenticated but unencrypted.
+- **authPriv**: authentication plus AES-128 encryption, using separate authentication and privacy passphrases.
+- Authentication choices: **SHA-256** (default), **SHA-384**, **SHA-512**, or explicitly selected **SHA-1 (legacy)**. Privacy is **AES-128**. MD5, DES and AES-192/256 are not offered in this release.
+
+Passphrases need 8–1,024 UTF-8 bytes. Only fields needed for the selected security level are enabled. Apply the profile, then scan/read normally. Passwords remain masked unless Show passphrases is selected. Profiles, usernames and passwords are not persisted or exported; profile objects and library key caches exist only in process memory until the app exits.
+
+The app discovers each agent's engine ID and clock before sending profile requests. It validates authentication/decryption, response security flags, username, engine, context, message/request IDs and the engine time window before accepting values. A time/engine report permits one bounded rediscovery/retry using the same profile. It never switches to weaker authentication, removes encryption or falls back to v1/v2c. Valid data replies update the cached engine clock during a scan/read.
+
+A device that answers engine discovery but rejects the requested profile is shown with an explicit v3 report/security/no-profile-response status. Such a row confirms a v3 engine replied, **not** that credentials were accepted or values were read. Check the device's user, algorithms, passphrases, context and access policy. Invalid packets and profile failures never populate the value table.
+
+The embedded dependency is [SharpSNMP 12.5.7](https://www.nuget.org/packages/Lextm.SharpSnmpLib/12.5.7). Its MIT notice is included in the EXE (**About**), the ZIP and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
 
 ## Read device data
 
@@ -37,7 +55,7 @@ An empty discovery result does **not** prove there are no devices: SNMP may be d
 
 ## CSV export
 
-**Export CSV** saves the currently selected tab: discovered devices or collected device values. Choose the path in the save dialog (initially beside the portable EXE). Export is UTF-8 with a BOM, escaped CSV fields and formula neutralization for values that could execute as spreadsheet formulas. Community strings are never exported.
+**Export CSV** saves the currently selected tab: discovered devices or collected device values. Choose the path in the save dialog (initially beside the portable EXE). Export is UTF-8 with a BOM, escaped CSV fields and formula neutralization for values that could execute as spreadsheet formulas. Community strings, v3 usernames and authentication/privacy passphrases are never exported.
 
 No files are written during scanning or data reads. Results stay in memory until exported or the application closes. Changing the adapter clears results so previous devices are not queried accidentally through a different interface.
 
@@ -49,9 +67,9 @@ On Windows:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 ```
 
-Uses the built-in .NET Framework compiler, standard framework libraries and a small bounded SNMP/BER implementation; no NuGet dependencies. Output is a single AnyCPU `dist/snmptoolRAV.exe`. Development and CI tests communicate only with local loopback mock SNMP agents, not other devices on a runner's network.
+Uses the built-in .NET Framework compiler, standard framework libraries, the existing bounded v1/v2c codec and pinned SharpSNMP 12.5.7 for v3. The build downloads the official NuGet package, checks its pinned SHA-256 and embeds the framework assembly in the EXE. First build needs internet; app use does not. Output is a single AnyCPU `dist/snmptoolRAV.exe`. Development and CI tests communicate only with local loopback test SNMP agents, not other devices on a runner's network.
 
-Checks cover independent BER wire fixtures, signed integers/OIDs/Counter64, malformed/fuzzed packets, subnet boundaries/scope and explicit routed ranges for /32 VPNs, real UDP v1/v2c requests, Windows interface-index binding, auto-version fallback, request-ID/community matching, cancellation, bounded GETNEXT walks and CSV handling. CI renders real WinForms discovery/detail/compact previews with **sample** device data. Physical printer/VPN/virtual-adapter reachability and vendor-specific MIB behavior need validation on your devices.
+Checks cover independent BER wire fixtures, signed integers/OIDs/Counter64, malformed/fuzzed packets, subnet boundaries/scope and explicit routed ranges for /32 VPNs, real UDP v1/v2c requests, Windows interface-index binding, auto-version fallback, request-ID/community matching, cancellation, bounded GETNEXT walks and CSV handling. V3 tests cover all supported SHA/AES profiles, engine caching, authenticated resync, tampered data, security downgrade rejection, context/time mismatch, cancellation and visible profile-error rows. An independent Linux Net-SNMP agent checks actual v3 discovery/GET/GETNEXT with every offered algorithm, plus wrong authentication/privacy credentials, unknown user and invalid context. All test agents bind only to loopback. CI renders real WinForms discovery/detail/compact and v3-profile previews with **sample** device data. Physical printer/VPN/virtual-adapter reachability and vendor-specific MIB behavior need validation on your devices.
 
 Tagged builds prepare a draft GitHub Release with EXE/ZIP downloads, checksums and UI previews for review before publication. Release assets avoid dependence on Actions artifact-storage quota.
 

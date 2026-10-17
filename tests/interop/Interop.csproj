@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Lextm.SharpSnmpLib" Version="12.5.7" />
+    <Compile Include="../../src/Snmp.cs" />
+    <Compile Include="../../src/Network.cs" />
+    <Compile Include="../../src/V3.cs" />
+    <Compile Include="NetSnmpTests.cs" />
+  </ItemGroup>
+</Project>
