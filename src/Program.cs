@@ -54,7 +54,7 @@ namespace SnmptoolRAV {
         bool settingsVisible=true;
         readonly bool preview;
         CancellationTokenSource cancellation;
-        bool busy,closing;
+        bool busy,closing,reading;
         string dataDevice="";
         static ComboBox Choice(string name) { return new ComboBox { AccessibleName=name, DropDownStyle=ComboBoxStyle.DropDownList, Dock=DockStyle.Top, Font=new Font("Segoe UI",10), BackColor=Theme.Surface, ForeColor=Theme.Text, FlatStyle=FlatStyle.Flat, Margin=new Padding(0,3,12,0), DropDownWidth=850 }; }
         static TextBox Input(string name) { return new TextBox { AccessibleName=name, Dock=DockStyle.Top, Font=new Font("Segoe UI",10), BorderStyle=BorderStyle.FixedSingle, Margin=new Padding(0,3,12,0) }; }
@@ -115,11 +115,11 @@ namespace SnmptoolRAV {
             SetBusy(false);
         }
         void SetSettingsVisible(bool visible) {settingsVisible=visible;settings.Visible=visible;root.RowStyles[1].Height=visible?224:0;connectionToggle.Text=visible?"Hide connection settings":"Show connection settings";root.PerformLayout();}
-        void UpdateSelected() {var item=CurrentDevice();selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name)+"  /  "+item.VersionText;SetBusy(busy);}
+        void UpdateSelected() {var item=CurrentDevice();if(item==null || (!String.IsNullOrEmpty(dataDevice)&&dataDevice!=item.IP)){values.Clear();data.Rows.Clear();value.Clear();dataDevice="";}selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name)+"  /  "+item.VersionText;SetBusy(busy);}
         DeviceResult CurrentDevice() {return devices.SelectedRows.Count==0?null:devices.SelectedRows[0].Tag as DeviceResult;}
         void SetStatus(string text,bool success) {status.Text=text;status.ForeColor=success?Theme.Success:Theme.Muted;tips.SetToolTip(status,text);}
         void SetBusy(bool valueBusy) {
-            busy=valueBusy;progress.Visible=busy;settings.Enabled=refresh.Enabled=start.Enabled=!busy;stop.Enabled=busy;
+            busy=valueBusy;devices.Enabled=!busy||!reading;progress.Visible=busy;settings.Enabled=refresh.Enabled=start.Enabled=!busy;stop.Enabled=busy;
             read.Enabled=readData.Enabled=!busy&&CurrentDevice()!=null; preset.Enabled=oid.Enabled=!busy;
             export.Enabled=!busy&&(tabs.SelectedTab==dataTab?values.Count>0:results.Count>0);
         }
@@ -155,11 +155,11 @@ namespace SnmptoolRAV {
         async Task ReadData() {
             var device=CurrentDevice();if(device==null)return;ScanOptions options;string rootOid;
             try {options=Options();rootOid=Ber.NormalizeOid(oid.Text);}catch(Exception ex){Error(ex);return;}
-            values.Clear();data.Rows.Clear();value.Clear();dataDevice=device.IP;tabs.SelectedTab=dataTab;progress.Style=ProgressBarStyle.Marquee;cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Reading "+rootOid+" from "+device.IP+" (up to 512 values / 60 seconds)...",false);
+            values.Clear();data.Rows.Clear();value.Clear();dataDevice=device.IP;reading=true;tabs.SelectedTab=dataTab;progress.Style=ProgressBarStyle.Marquee;cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Reading "+rootOid+" from "+device.IP+" (up to 512 values / 60 seconds)...",false);
             var rows=new Progress<DataRow>(row=>AddValue(row));
             try {var result=await Task.Run(()=>Walker.Read(new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout),IPAddress.Parse(device.IP),options.Version<0?device.Version:options.Version,options.Community,rootOid,512,row=>((IProgress<DataRow>)rows).Report(row),cancellation.Token));SetStatus(result.Rows.Count+" values. "+result.Status,result.Status.StartsWith("Read complete",StringComparison.Ordinal));}
             catch(OperationCanceledException){SetStatus("Read stopped. Collected values are kept.",false);}catch(Exception ex){Error(ex);}
-            finally {progress.Style=ProgressBarStyle.Continuous;progress.Value=0;cancellation.Dispose();cancellation=null;SetBusy(false);if(closing)Close();}
+            finally {reading=false;progress.Style=ProgressBarStyle.Continuous;progress.Value=0;cancellation.Dispose();cancellation=null;SetBusy(false);if(closing)Close();}
         }
         void ExportCsv() {
             bool detail=tabs.SelectedTab==dataTab;
@@ -178,8 +178,14 @@ namespace SnmptoolRAV {
                 form.AddValue(new DataRow {Oid="1.3.6.1.2.1.43.5.1.1.16.1",Name="Printer name [1]",Type="String",Value="Office printer"});
                 form.AddValue(new DataRow {Oid="1.3.6.1.2.1.43.11.1.1.6.1.1",Name="Supply description [1.1]",Type="String",Value="Black toner"});
                 form.AddValue(new DataRow {Oid="1.3.6.1.2.1.43.11.1.1.9.1.1",Name="Supply level [1.1]",Type="Integer",Value="72"});
-                form.SetBusy(false);form.SetStatus("Sample device data - values depend on what each device exposes.",false);Application.DoEvents();SavePreview(form,directory,"device-data");
-                form.ClientSize=new Size(944,661);Application.DoEvents();SavePreview(form,directory,"compact");form.Hide();
+                form.dataDevice="192.168.1.42";form.SetBusy(false);form.SetStatus("Sample device data - values depend on what each device exposes.",false);Application.DoEvents();SavePreview(form,directory,"device-data");
+                form.ClientSize=new Size(944,661);Application.DoEvents();SavePreview(form,directory,"compact");
+                if(!form.selected.Text.Contains("Office printer"))throw new Exception("Selected-device context was not updated.");
+                form.devices.Rows[1].Selected=true;Application.DoEvents();
+                if(form.values.Count!=0||form.data.Rows.Count!=0)throw new Exception("Previous device data was not cleared after selection changed.");
+                form.reading=true;form.SetBusy(true);
+                if(form.devices.Enabled)throw new Exception("Device selection is not locked during a data read.");
+                form.reading=false;form.SetBusy(false);form.Hide();
             }
         }
         static void SavePreview(MainForm form,string directory,string name){using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new Rectangle(0,0,image.Width,image.Height));image.Save(Path.Combine(directory,name+".png"),System.Drawing.Imaging.ImageFormat.Png);}}

@@ -107,6 +107,7 @@ namespace SnmptoolRAV {
         public int Version; public byte[] Community; public byte Pdu; public int RequestId; public int Error; public List<SnmpValue> Values;
         public static byte[] Encode(int version, string community, int request, byte pdu, IEnumerable<SnmpValue> values, int error) {
             if (version != 0 && version != 1) throw new ArgumentException("Only SNMP v1 and v2c are supported.");
+            if (pdu != 0xa0 && pdu != 0xa1 && pdu != 0xa2) throw new ArgumentException("This tool supports only GET, GETNEXT and their responses.");
             byte[][] bindings = values.Select(v => Ber.Pack(0x30,Ber.Oid(v.Oid),Ber.Pack(v.Value.Tag,v.Value.Data))).ToArray();
             return Ber.Pack(0x30,Ber.Integer(version),Ber.Pack(4,Encoding.UTF8.GetBytes(community)),Ber.Pack(pdu,Ber.Integer(request),Ber.Integer(error),Ber.Integer(0),Ber.Pack(0x30,bindings)));
         }
