@@ -133,6 +133,7 @@ namespace SnmptoolRAV {
         }
         void Error(Exception ex) {SetStatus("Operation could not finish: "+ex.Message,false);MessageBox.Show(this,ex.Message,"snmptoolRAV",MessageBoxButtons.OK,MessageBoxIcon.Error);}
         void AddDevice(DeviceResult item) {if(IsDisposed)return;results.Add(item);int index=devices.Rows.Add(item.IP,item.Name,item.Description,item.VersionText,item.Status);devices.Rows[index].Tag=item;deviceTab.Text="Devices ("+results.Count+")";}
+        void AddValue(DataRow row) {if(IsDisposed)return;values.Add(row);data.Rows.Add(row.Oid,row.Name,row.Type,row.Value);}
         async Task Scan() {
             ScanOptions options;try {options=Options();}catch(Exception ex){Error(ex);return;}
             results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();deviceTab.Text="Devices (0)";tabs.SelectedTab=deviceTab;progress.Value=0;
@@ -147,7 +148,7 @@ namespace SnmptoolRAV {
             var device=CurrentDevice();if(device==null)return;ScanOptions options;string rootOid;
             try {options=Options();rootOid=Ber.NormalizeOid(oid.Text);}catch(Exception ex){Error(ex);return;}
             values.Clear();data.Rows.Clear();value.Clear();dataDevice=device.IP;tabs.SelectedTab=dataTab;progress.Style=ProgressBarStyle.Marquee;cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Reading "+rootOid+" from "+device.IP+" (up to 512 values / 60 seconds)...",false);
-            var rows=new Progress<DataRow>(row=>{if(IsDisposed)return;values.Add(row);data.Rows.Add(row.Oid,row.Name,row.Type,row.Value);});
+            var rows=new Progress<DataRow>(row=>AddValue(row));
             try {var result=await Task.Run(()=>Walker.Read(new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout),IPAddress.Parse(device.IP),options.Version<0?device.Version:options.Version,options.Community,rootOid,512,row=>((IProgress<DataRow>)rows).Report(row),cancellation.Token));SetStatus(result.Rows.Count+" values. "+result.Status,result.Status.StartsWith("Read complete",StringComparison.Ordinal));}
             catch(OperationCanceledException){SetStatus("Read stopped. Collected values are kept.",false);}catch(Exception ex){Error(ex);}
             finally {progress.Style=ProgressBarStyle.Continuous;progress.Value=0;cancellation.Dispose();cancellation=null;SetBusy(false);if(closing)Close();}
@@ -165,7 +166,11 @@ namespace SnmptoolRAV {
                 form.adapter.Items.Add(new Adapter {Name="Ethernet",Description="Configured physical or virtual network adapter",Address=IPAddress.Parse("192.168.1.10"),Mask=IPAddress.Parse("255.255.255.0"),Index=7,Up=true});form.adapter.SelectedIndex=0;form.community.Text="public";
                 form.AddDevice(new DeviceResult {IP="192.168.1.42",Name="Office printer",Description="Network printer / SNMP agent",Version=1,Status="Responding"});form.AddDevice(new DeviceResult {IP="192.168.1.80",Name="Storage",Description="Network storage appliance",Version=0,Status="Responding"});
                 form.SetStatus("Scan complete: 2 SNMP devices found. Select a device to read its data.",true);form.SetBusy(false);form.Show();Application.DoEvents();SavePreview(form,directory,"discovery");
-                form.tabs.SelectedTab=form.dataTab;form.data.Rows.Add("1.3.6.1.2.1.1.5.0","System name [0]","String","Office printer");form.data.Rows.Add("1.3.6.1.2.1.1.6.0","Location [0]","String","Home office");form.data.Rows.Add("1.3.6.1.2.1.43.11.1.1.6.1.1","Supply description [1.1]","String","Black toner");form.SetStatus("Sample device data - values depend on what each device exposes.",false);Application.DoEvents();SavePreview(form,directory,"device-data");
+                form.tabs.SelectedTab=form.dataTab;form.preset.SelectedIndex=1;
+                form.AddValue(new DataRow {Oid="1.3.6.1.2.1.43.5.1.1.16.1",Name="Printer name [1]",Type="String",Value="Office printer"});
+                form.AddValue(new DataRow {Oid="1.3.6.1.2.1.43.11.1.1.6.1.1",Name="Supply description [1.1]",Type="String",Value="Black toner"});
+                form.AddValue(new DataRow {Oid="1.3.6.1.2.1.43.11.1.1.9.1.1",Name="Supply level [1.1]",Type="Integer",Value="72"});
+                form.SetBusy(false);form.SetStatus("Sample device data - values depend on what each device exposes.",false);Application.DoEvents();SavePreview(form,directory,"device-data");
                 form.ClientSize=new Size(944,661);Application.DoEvents();SavePreview(form,directory,"compact");form.Hide();
             }
         }

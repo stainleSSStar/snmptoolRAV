@@ -36,9 +36,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets=@('snmptoolRAV-portable.zip','dist/snmptoolRAV.exe','dist/SHA256SUMS.txt')+@(Get-ChildItem dist/ui-previews/*.png | ForEach-Object FullName)
-          $draft=gh release view $env:GITHUB_REF_NAME --json isDraft --jq .isDraft 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            if ($draft -ne 'true') { throw 'Refusing to overwrite a published release.' }
+          $releases=gh release list --limit 100 --json tagName,isDraft | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing releases.' }
+          $existing=$releases | Where-Object tagName -eq $env:GITHUB_REF_NAME | Select-Object -First 1
+          if ($null -ne $existing) {
+            if (!$existing.isDraft) { throw 'Refusing to overwrite a published release.' }
             gh release upload $env:GITHUB_REF_NAME @assets --clobber
             if ($LASTEXITCODE -ne 0) { throw 'Draft asset update failed.' }
             gh release edit $env:GITHUB_REF_NAME --title "snmptoolRAV $env:GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
