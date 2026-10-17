@@ -63,7 +63,7 @@ namespace SnmptoolRAV {
     public sealed class ScanProgress { public int Completed; public int Total; public int Found; public int Errors; }
     public static class Scanner {
         const string DescriptionOid = "1.3.6.1.2.1.1.1.0";
-        public static void Scan(ScanOptions options, Action<DeviceResult> found, Action<ScanProgress> progress, CancellationToken cancel) {
+        public static ScanProgress Scan(ScanOptions options, Action<DeviceResult> found, Action<ScanProgress> progress, CancellationToken cancel) {
             options.Validate(); var client = new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout); client.CheckBinding();
             int cursor=-1,completed=0,responders=0,errors=0;
             var tasks = new List<Task>();
@@ -96,7 +96,8 @@ namespace SnmptoolRAV {
                 },CancellationToken.None,TaskCreationOptions.LongRunning,TaskScheduler.Default));
             }
             Task.WaitAll(tasks.ToArray());
-            progress(new ScanProgress { Completed=completed,Total=options.Range.Count,Found=responders,Errors=errors }); cancel.ThrowIfCancellationRequested();
+            var summary = new ScanProgress { Completed=completed,Total=options.Range.Count,Found=responders,Errors=errors };
+            progress(summary); cancel.ThrowIfCancellationRequested(); return summary;
         }
     }
     public sealed class DataRow { public string Oid; public string Name; public string Type; public string Value; }

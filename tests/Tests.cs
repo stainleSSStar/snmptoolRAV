@@ -31,6 +31,9 @@ static class Tests {
         Check(get.SequenceEqual(Hex("302602010104067075626c6963a019020101020100020100300e300c06082b060102010101000500")),"GET matches independent BER wire fixture");
         var response=SnmpMessage.Decode(Hex("302a02010104067075626c6963a21d0201010201000201003012301006082b06010201010100040474657374"));
         Check(response.Pdu==0xa2&&response.Values[0].Value.Display()=="test","Decode independent response fixture");
+        string longText=new String('x',600)+" / zażółć";
+        var longReply=SnmpMessage.Encode(1,"public",1,0xa2,new[]{new SnmpValue{Oid="1.3.6.1.2.1.1.1.0",Value=Text(longText)}},0);
+        Check(SnmpMessage.Decode(longReply).Values[0].Value.Display()==longText,"Long-form BER lengths and UTF-8 strings");
         foreach(string oid in new[]{"0.0","1.39.4294967295","2.999.128.16384","2.4294967295.4294967295"}){int offset=0;Check(Ber.Read(Ber.Oid(oid),ref offset).OidText()==oid,"OID base-128 roundtrip");}
         foreach(int value in new[]{-2147483648,-129,-128,-1,0,127,128,2147483647}){int p=0;Check(Ber.Read(Ber.Integer(value),ref p).Signed()==value,"Signed integer roundtrip");}
         Check(new Ber(0x46,new byte[]{0,255,255,255,255,255,255,255,255}).Display()==UInt64.MaxValue.ToString(),"Counter64 does not overflow signed integers");

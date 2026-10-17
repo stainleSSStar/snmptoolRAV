@@ -139,7 +139,7 @@ namespace SnmptoolRAV {
             cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Scanning "+options.Range+" through "+options.Adapter.Name+"...",false);
             var found=new Progress<DeviceResult>(item=>AddDevice(item));
             var report=new Progress<ScanProgress>(p=>{if(IsDisposed)return;progress.Value=Math.Min(100,(int)(100L*p.Completed/p.Total));SetStatus(p.Completed+" / "+p.Total+" IPs checked  |  "+p.Found+" SNMP devices  |  "+p.Errors+" network/response errors",false);});
-            try {await Task.Run(()=>Scanner.Scan(options,item=>((IProgress<DeviceResult>)found).Report(item),p=>((IProgress<ScanProgress>)report).Report(p),cancellation.Token));SetStatus("Scan complete: "+results.Count+" SNMP devices found. No reply can mean wrong community/version, blocked UDP or SNMP disabled.",true);}
+            try {var summary=await Task.Run(()=>Scanner.Scan(options,item=>((IProgress<DeviceResult>)found).Report(item),p=>((IProgress<ScanProgress>)report).Report(p),cancellation.Token));SetStatus("Complete: "+summary.Completed+" IPs checked / "+summary.Found+" SNMP devices / "+summary.Errors+" errors. No reply: check community, version, UDP access and device SNMP settings.",summary.Errors==0);}
             catch(OperationCanceledException){SetStatus("Scan stopped. Discovered devices are kept.",false);}catch(Exception ex){Error(ex);}
             finally {cancellation.Dispose();cancellation=null;SetBusy(false);if(closing)Close();}
         }
