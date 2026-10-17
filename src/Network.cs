@@ -36,13 +36,13 @@ namespace SnmptoolRAV {
             uint n = Number(mask); bool zero = false; int prefix = 0;
             for (int i=31;i>=0;i--) { bool one = ((n>>i)&1) != 0; if (one && zero) throw new ArgumentException("The adapter has a non-contiguous IPv4 mask."); if (one) prefix++; else zero = true; } return prefix;
         }
-        public static IpRange Parse(string text, Adapter adapter) {
+        public static IpRange Parse(string text, Adapter adapter, bool allowRouted = false) {
             if (adapter == null) throw new ArgumentException("Choose a network adapter.");
             string[] parts = text.Trim().Split('/'); int prefix;
             if (parts.Length != 2 || !Int32.TryParse(parts[1],NumberStyles.None,CultureInfo.InvariantCulture,out prefix) || prefix < 16 || prefix > 32) throw new ArgumentException("Use an IPv4 subnet from /16 to /32 (at most 65,534 hosts), e.g. 192.168.1.0/24.");
             string[] octets = parts[0].Split('.'); byte octet; if (octets.Length != 4 || octets.Any(p => !Byte.TryParse(p,NumberStyles.None,CultureInfo.InvariantCulture,out octet))) throw new ArgumentException("Enter a valid IPv4 address and prefix.");
             uint ip = Number(new IPAddress(octets.Select(p=>Byte.Parse(p,CultureInfo.InvariantCulture)).ToArray())); uint mask = UInt32.MaxValue << (32-prefix); uint first = ip & mask; uint last = first | ~mask;
-            Prefix(adapter.Mask); uint localMask = Number(adapter.Mask); if ((first & localMask) != (Number(adapter.Address)&localMask) || (last & localMask) != (Number(adapter.Address)&localMask)) throw new ArgumentException("The scan range must stay inside the chosen adapter's configured subnet.");
+            Prefix(adapter.Mask); uint localMask = Number(adapter.Mask); if (!allowRouted && ((first & localMask) != (Number(adapter.Address)&localMask) || (last & localMask) != (Number(adapter.Address)&localMask))) throw new ArgumentException("This range is outside the adapter's configured subnet. For a routed network or /32 VPN, explicitly enable Routed / VPN subnet.");
             if ((first>>24) == 0 || last >= 0xe0000000) throw new ArgumentException("Choose a unicast IPv4 subnet.");
             return new IpRange { Network = first, Last = last, FirstHost = prefix < 31 ? first+1 : first, Count = checked((int)((ulong)last-first+1-(prefix < 31 ? 2UL : 0UL))), PrefixLength = prefix };
         }

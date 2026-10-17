@@ -1,7 +1,7 @@
 Portable Windows SNMP network discovery and data reader.
 
 - Choose any configured IPv4 adapter/address, including virtual adapters.
-- Scan an editable subnet inside the selected adapter's network.
+- Scan an editable subnet, with an explicit Routed / VPN subnet option for /32-addressed VPNs and routed LANs.
 - Community input with optional Auto/v2c/v1 version selection, UDP port, timeout and retries.
 - Discover SNMP devices without requiring ping, then read system, printer or custom OID subtrees.
 - Clear progress, Stop, partial-read reporting and CSV export without saved community credentials.

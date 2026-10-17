@@ -53,6 +53,9 @@ static class Tests {
         Check(IpRange.Parse("192.168.10.0/31",adapter).Count==2&&IpRange.Parse("192.168.10.9/32",adapter).Count==1,"Point-to-point and single-host ranges");
         Check(IpRange.Parse("192.168.0.0/16",adapter).Count==65534,"Maximum scan bound");
         Reject(()=>IpRange.Parse("192.169.1.0/24",adapter));Reject(()=>IpRange.Parse("192.168.0.0/15",adapter));Reject(()=>IpRange.Parse("192.168.10/24",adapter));
+        var vpn=new Adapter{Address=IPAddress.Parse("10.8.0.2"),Mask=IPAddress.Parse("255.255.255.255")};
+        Reject(()=>IpRange.Parse("192.168.1.0/24",vpn));
+        Check(IpRange.Parse("192.168.1.0/24",vpn,true).Count==254,"Explicit routed-range selection supports /32 VPN adapters");
         Check(IpRange.Prefix(IPAddress.Parse("255.255.255.128"))==25,"Mask prefix");Reject(()=>IpRange.Prefix(IPAddress.Parse("255.0.255.0")));
     }
     static void UdpTests(){

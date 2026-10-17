@@ -25,6 +25,7 @@ namespace SnmptoolRAV {
         readonly NumericUpDown port = Number("UDP port",1,65535,161);
         readonly NumericUpDown timeout = Number("Reply timeout in milliseconds",100,5000,600);
         readonly NumericUpDown retries = Number("Retries per version",0,2,0);
+        readonly CheckBox routed = new CheckBox { Text = "Routed / VPN subnet", AutoSize = true, ForeColor = Theme.Muted, AccessibleName = "Allow the entered routed or VPN subnet" };
         readonly CheckBox show = new CheckBox { Text = "Show", AutoSize = true, ForeColor = Theme.Muted };
         readonly Label adapterInfo = TextLabel("Choose a configured IPv4 adapter. Virtual adapters are included.",9,false);
         readonly Label status = TextLabel("Choose an adapter and enter your community name to begin.",10,false);
@@ -80,6 +81,7 @@ namespace SnmptoolRAV {
             Field(fields,0,0,"Network adapter / IPv4 address",adapter); fields.SetColumnSpan(adapter,6); fields.SetColumnSpan(fields.GetControlFromPosition(0,0),6);
             fields.Controls.Add(adapterInfo,0,2); fields.SetColumnSpan(adapterInfo,6);
             Field(fields,0,3,"IPv4 subnet (CIDR)",range); Field(fields,1,3,"Community",community); Field(fields,2,3,"Version (optional)",version); Field(fields,3,3,"UDP port",port); Field(fields,4,3,"Timeout (ms)",timeout); Field(fields,5,3,"Retries",retries);
+            fields.Controls.Add(routed,0,5); tips.SetToolTip(routed,"For a routed network or a VPN with /32 addressing: scans only the entered CIDR through the selected adapter. Routing must support it.");
             fields.Controls.Add(show,1,5);
             var note=TextLabel("Auto: v2c then v1. Community stays in memory; v1/v2c send it unencrypted. SNMPv3 is planned.",8,false); fields.Controls.Add(note,2,5); fields.SetColumnSpan(note,4);
             community.UseSystemPasswordChar=true; show.CheckedChanged+=delegate {community.UseSystemPasswordChar=!show.Checked;}; version.Items.AddRange(new object[] {"Auto (v2c / v1)","SNMP v2c","SNMP v1"}); version.SelectedIndex=0;
@@ -119,7 +121,7 @@ namespace SnmptoolRAV {
             var item=adapter.SelectedItem as Adapter; if(item==null)return;
             try {range.Text=item.DefaultRange();adapterInfo.Text=item.Description+"  |  Mask "+item.Mask+"  |  Interface "+item.Index;tips.SetToolTip(adapterInfo,adapterInfo.Text);}
             catch(Exception ex){SetStatus(ex.Message,false);}
-            results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();deviceTab.Text="Devices (0)";SetBusy(false);
+            routed.Checked=false;results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();deviceTab.Text="Devices (0)";SetBusy(false);
         }
         void LoadAdapters() {
             try {results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();deviceTab.Text="Devices (0)";adapter.Items.Clear();foreach(var item in Adapter.List())adapter.Items.Add(item);if(adapter.Items.Count>0)adapter.SelectedIndex=0;else SetStatus("No configured IPv4 adapters found. Configure an adapter, then refresh.",false);}
@@ -129,7 +131,7 @@ namespace SnmptoolRAV {
             var item=adapter.SelectedItem as Adapter;
             if(item==null)throw new ArgumentException("Choose a configured IPv4 adapter.");
             if(!item.Up)throw new ArgumentException("This adapter is not connected. Connect or enable it, then refresh adapters.");
-            var options=new ScanOptions {Adapter=item,Range=IpRange.Parse(range.Text,item),Community=community.Text,Version=version.SelectedIndex==0?-1:version.SelectedIndex==1?1:0,Port=(int)port.Value,Timeout=(int)timeout.Value,Retries=(int)retries.Value};options.Validate();return options;
+            var options=new ScanOptions {Adapter=item,Range=IpRange.Parse(range.Text,item,routed.Checked),Community=community.Text,Version=version.SelectedIndex==0?-1:version.SelectedIndex==1?1:0,Port=(int)port.Value,Timeout=(int)timeout.Value,Retries=(int)retries.Value};options.Validate();return options;
         }
         void Error(Exception ex) {SetStatus("Operation could not finish: "+ex.Message,false);MessageBox.Show(this,ex.Message,"snmptoolRAV",MessageBoxButtons.OK,MessageBoxIcon.Error);}
         void AddDevice(DeviceResult item) {if(IsDisposed)return;results.Add(item);int index=devices.Rows.Add(item.IP,item.Name,item.Description,item.VersionText,item.Status);devices.Rows[index].Tag=item;deviceTab.Text="Devices ("+results.Count+")";}
