@@ -125,10 +125,10 @@ namespace SnmptoolRAV {
             return new SnmpMessage { Version = version, Community = message[1].Data, Pdu = type, RequestId = checked((int)pdu[0].Signed()), Error = checked((int)pdu[1].Signed()), Values = values };
         }
     }
-    public sealed class SnmpClient {
+    public sealed partial class SnmpClient {
         static int nextRequest = Environment.TickCount & 0x3fffffff;
         readonly IPAddress source; readonly int index; readonly int port; readonly int timeout;
-        public SnmpClient(IPAddress local, int interfaceIndex, int targetPort, int timeoutMs) { source = local; index = interfaceIndex; port = targetPort; timeout = timeoutMs; }
+        public SnmpClient(IPAddress local, int interfaceIndex, int targetPort, int timeoutMs, V3Profile v3 = null) { source = local; index = interfaceIndex; port = targetPort; timeout = timeoutMs; profile = v3; }
         public void CheckBinding() { using (var socket = BoundSocket()) { } }
         Socket BoundSocket() {
             var socket = new Socket(AddressFamily.InterNetwork,SocketType.Dgram,ProtocolType.Udp);
@@ -140,6 +140,7 @@ namespace SnmptoolRAV {
             } catch { socket.Dispose(); throw; }
         }
         public SnmpMessage Query(IPAddress target, int version, string community, string oid, bool next, CancellationToken cancel) {
+            if(version==3)return QueryV3(target,oid,next,cancel);
             cancel.ThrowIfCancellationRequested(); int request = Interlocked.Increment(ref nextRequest) & Int32.MaxValue;
             var expectedCommunity = Encoding.UTF8.GetBytes(community);
             var packet = SnmpMessage.Encode(version,community,request,next ? (byte)0xa1 : (byte)0xa0,new[] { new SnmpValue { Oid = oid, Value = new Ber(5,new byte[0]) } },0);

@@ -87,5 +87,5 @@ static class Tests {
         }
         using(var agent=new Agent(r=>Reply(r,r.Values[0].Oid,Text("repeated")))){var result=Walker.Read(new SnmpClient(IPAddress.Loopback,0,agent.Port,300),IPAddress.Loopback,1,"test","1.3.6.1.2.1.1",100,row=>{},CancellationToken.None);Check(result.Rows.Count==0&&result.Status.Contains("out-of-order"),"Stop non-progressing agents");}
     }
-    static int Main(){try{CodecTests();RangeTests();UdpTests();WalkTests();Console.WriteLine("All SNMP codec, subnet, source-binding, UDP discovery, fallback, cancellation, walk and CSV tests passed.");return 0;}catch(Exception ex){Console.Error.WriteLine(ex);return 1;}}
+    static int Main(){try{CodecTests();RangeTests();UdpTests();WalkTests();V3Tests.Run();Console.WriteLine("All SNMP codec, subnet, source-binding, UDP discovery, fallback, cancellation, walk and CSV tests passed.");return 0;}catch(Exception ex){Console.Error.WriteLine(ex);return 1;}}
 }

@@ -2,3 +2,4 @@ dist/
 ui-review/
 *.csv
 *.zip
+.build/

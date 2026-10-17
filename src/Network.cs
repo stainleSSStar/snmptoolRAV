@@ -49,22 +49,23 @@ namespace SnmptoolRAV {
         public override string ToString() { return Address(Network) + "/" + PrefixLength.ToString(CultureInfo.InvariantCulture); }
     }
     public sealed class ScanOptions {
-        public Adapter Adapter; public IpRange Range; public string Community; public int Version = -1; public int Port = 161; public int Timeout = 600; public int Retries; public int Workers = 24;
+        public Adapter Adapter; public IpRange Range; public string Community; public V3Profile V3; public int Version = -1; public int Port = 161; public int Timeout = 600; public int Retries; public int Workers = 24;
         public void Validate() {
             if (Adapter == null || Range == null) throw new ArgumentException("Choose an adapter and subnet.");
-            if (String.IsNullOrEmpty(Community) || Encoding.UTF8.GetByteCount(Community) > 255) throw new ArgumentException("Enter a community name (1 to 255 UTF-8 bytes).");
-            if (Version < -1 || Version > 1 || Port < 1 || Port > 65535 || Timeout < 100 || Timeout > 5000 || Retries < 0 || Retries > 2 || Workers < 1 || Workers > 32) throw new ArgumentException("Invalid scan settings.");
+            if (Version==3) {if(V3==null)throw new ArgumentException("Configure an SNMPv3 profile.");V3.Validate();}
+            else if (String.IsNullOrEmpty(Community) || Encoding.UTF8.GetByteCount(Community) > 255) throw new ArgumentException("Enter a community name (1 to 255 UTF-8 bytes).");
+            if ((Version < -1 || (Version > 1 && Version != 3)) || Port < 1 || Port > 65535 || Timeout < 100 || Timeout > 5000 || Retries < 0 || Retries > 2 || Workers < 1 || Workers > 32) throw new ArgumentException("Invalid scan settings.");
         }
     }
     public sealed class DeviceResult {
         public string IP; public string Name; public string Description; public int Version; public string Status;
-        public string VersionText { get { return Version == 0 ? "v1" : "v2c"; } }
+        public string VersionText { get { return Version == 3 ? "v3" : Version == 0 ? "v1" : "v2c"; } }
     }
     public sealed class ScanProgress { public int Completed; public int Total; public int Found; public int Errors; }
     public static class Scanner {
         const string DescriptionOid = "1.3.6.1.2.1.1.1.0";
         public static ScanProgress Scan(ScanOptions options, Action<DeviceResult> found, Action<ScanProgress> progress, CancellationToken cancel) {
-            options.Validate(); var client = new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout); client.CheckBinding();
+            options.Validate(); var client = new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout,options.V3); client.CheckBinding();
             int cursor=-1,completed=0,responders=0,errors=0;
             var tasks = new List<Task>();
             for (int worker=0;worker<Math.Min(options.Workers,options.Range.Count);worker++) {
@@ -86,6 +87,7 @@ namespace SnmptoolRAV {
                                 Interlocked.Increment(ref responders); found(result); break;
                             }
                         } catch (OperationCanceledException) { break; }
+                        catch (SnmpSecurityException ex) {Interlocked.Increment(ref responders);Interlocked.Increment(ref errors);found(new DeviceResult {IP=ip.ToString(),Version=3,Name="",Description=ex.Message,Status=ex.Status});}
                         catch (SocketException) { Interlocked.Increment(ref errors); }
                         catch (FormatException) { Interlocked.Increment(ref errors); }
                         finally {

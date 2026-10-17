@@ -11,7 +11,9 @@ using System.Windows.Forms;
 
 namespace SnmptoolRAV {
     static class Program {
-        [STAThread] static int Main(string[] args) {
+        [STAThread] static int Main(string[] args) {Embedded.Initialize();return Run(args);}
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static int Run(string[] args) {
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             if (args.Length == 2 && args[0] == "--preview") { try { MainForm.Render(args[1]); return 0; } catch (Exception ex) { File.WriteAllText(args[1]+".error.txt",ex.ToString()); return 1; } }
             Application.Run(new MainForm(false)); return 0;
@@ -25,6 +27,9 @@ namespace SnmptoolRAV {
         readonly NumericUpDown port = Number("UDP port",1,65535,161);
         readonly NumericUpDown timeout = Number("Reply timeout in milliseconds",100,5000,600);
         readonly NumericUpDown retries = Number("Retries per version",0,2,0);
+        readonly ActionButton profileButton = new ActionButton("Configure v3...",false);
+        readonly Label profileNote = TextLabel("Auto: v2c then v1. Secrets stay in memory; v3 uses a separate profile.",8,false);
+        V3Profile v3Profile;bool wasV3;
         readonly CheckBox routed = new CheckBox { Text = "Routed / VPN subnet", AutoSize = true, ForeColor = Theme.Muted, AccessibleName = "Allow the entered routed or VPN subnet" };
         readonly CheckBox show = new CheckBox { Text = "Show", AutoSize = true, ForeColor = Theme.Muted };
         readonly Label adapterInfo = TextLabel("Choose a configured IPv4 adapter. Virtual adapters are included.",9,false);
@@ -75,19 +80,21 @@ namespace SnmptoolRAV {
             root=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=1, RowCount=6, Padding=new Padding(22), BackColor=Theme.Background };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
             foreach (var style in new[] {new RowStyle(SizeType.Absolute,64),new RowStyle(SizeType.Absolute,224),new RowStyle(SizeType.Absolute,56),new RowStyle(SizeType.Percent,100),new RowStyle(SizeType.Absolute,8),new RowStyle(SizeType.Absolute,44)}) root.RowStyles.Add(style);
-            var header=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=2, Margin=new Padding(0) }; header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));
-            header.Controls.Add(TextLabel("snmptoolRAV",23,true),0,0); header.Controls.Add(connectionToggle,1,0); root.Controls.Add(header,0,0);
+            var header=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=3, Margin=new Padding(0) }; header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,64));
+            header.Controls.Add(TextLabel("snmptoolRAV",23,true),0,0); header.Controls.Add(connectionToggle,1,0);var about=new LinkLabel{Text="About",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,LinkColor=Theme.Accent};about.LinkClicked+=delegate{MessageBox.Show(this,"snmptoolRAV / SNMPv3 edition\r\n\r\n"+Embedded.Notices(),"About / third-party licenses",MessageBoxButtons.OK,MessageBoxIcon.Information);};header.Controls.Add(about,2,0);root.Controls.Add(header,0,0);
             settings=new Card { Dock=DockStyle.Fill, Margin=new Padding(0,0,0,12), Padding=new Padding(18,12,18,12) };
             var fields=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=6, RowCount=6, Margin=new Padding(0), BackColor=Theme.Surface };
             foreach (float width in new[] {28f,23f,17f,10f,12f,10f}) fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,width));
             foreach (int height in new[] {22,35,28,22,36,35}) fields.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
             Field(fields,0,0,"Network adapter / IPv4 address",adapter); fields.SetColumnSpan(adapter,6); fields.SetColumnSpan(fields.GetControlFromPosition(0,0),6);
             fields.Controls.Add(adapterInfo,0,2); fields.SetColumnSpan(adapterInfo,6);
-            Field(fields,0,3,"IPv4 subnet (CIDR)",range); Field(fields,1,3,"Community",community); Field(fields,2,3,"Version (optional)",version); Field(fields,3,3,"UDP port",port); Field(fields,4,3,"Timeout (ms)",timeout); Field(fields,5,3,"Retries",retries);
+            Field(fields,0,3,"IPv4 subnet (CIDR)",range); var credentials=new Panel{Dock=DockStyle.Fill,Margin=new Padding(0,0,12,0)};community.Margin=new Padding(0);profileButton.Dock=DockStyle.Fill;profileButton.Margin=new Padding(0,0,0,6);profileButton.Visible=false;credentials.Controls.Add(community);credentials.Controls.Add(profileButton);Field(fields,1,3,"Community / v3 profile",credentials); Field(fields,2,3,"Version (optional)",version); Field(fields,3,3,"UDP port",port); Field(fields,4,3,"Timeout (ms)",timeout); Field(fields,5,3,"Retries",retries);
             fields.Controls.Add(routed,0,5); tips.SetToolTip(routed,"For a routed network or a VPN with /32 addressing: scans only the entered CIDR through the selected adapter. Routing must support it.");
             fields.Controls.Add(show,1,5);
-            var note=TextLabel("Auto: v2c then v1. Community stays in memory; v1/v2c send it unencrypted. SNMPv3 is planned.",8,false); fields.Controls.Add(note,2,5); fields.SetColumnSpan(note,4);
-            community.UseSystemPasswordChar=true; show.CheckedChanged+=delegate {community.UseSystemPasswordChar=!show.Checked;}; version.Items.AddRange(new object[] {"Auto (v2c / v1)","SNMP v2c","SNMP v1"}); version.SelectedIndex=0;
+            fields.Controls.Add(profileNote,2,5);fields.SetColumnSpan(profileNote,4);
+            community.UseSystemPasswordChar=true; show.CheckedChanged+=delegate {community.UseSystemPasswordChar=!show.Checked;}; version.Items.AddRange(new object[] {"Auto (v2c / v1)","SNMP v2c","SNMP v1","SNMP v3"}); version.SelectedIndex=0;
+            version.SelectedIndexChanged+=delegate{UpdateProfileControls();};
+            profileButton.Click+=delegate{using(var dialog=new V3Dialog(v3Profile)){if(dialog.ShowDialog(this)==DialogResult.OK){v3Profile=dialog.Profile;values.Clear();data.Rows.Clear();value.Clear();dataDevice="";UpdateProfileControls();SetBusy(busy);}}};
             settings.Controls.Add(fields); root.Controls.Add(settings,0,1);
             var actions=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=6, Margin=new Padding(0,0,0,12) };
             foreach (int width in new[] {160,78,154,194,0,142}) actions.ColumnStyles.Add(width==0?new ColumnStyle(SizeType.Percent,100):new ColumnStyle(SizeType.Absolute,width));
@@ -114,6 +121,7 @@ namespace SnmptoolRAV {
             FormClosing+=delegate(object sender,FormClosingEventArgs e) {if(busy){e.Cancel=true;closing=true;if(cancellation!=null)cancellation.Cancel();SetStatus("Stopping network requests...",false);}};
             SetBusy(false);
         }
+        void UpdateProfileControls(){bool v3=version.SelectedIndex==3;if(v3!=wasV3){results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();dataDevice="";deviceTab.Text="Devices (0)";wasV3=v3;}community.Visible=show.Visible=!v3;profileButton.Visible=v3;profileButton.Text=v3Profile==null?"Configure v3...":"Edit v3 profile...";profileNote.Text=v3?(v3Profile==null?"Configure a v3 user, authentication and privacy profile. No community fallback.":"V3 only / "+v3Profile.Level+" / "+v3Profile.Authentication+" / AES-128 privacy when enabled. No fallback."):"Auto: v2c then v1. Community stays in memory; v1/v2c send it unencrypted.";tips.SetToolTip(profileNote,profileNote.Text);}
         void SetSettingsVisible(bool visible) {settingsVisible=visible;settings.Visible=visible;root.RowStyles[1].Height=visible?224:0;connectionToggle.Text=visible?"Hide connection settings":"Show connection settings";root.PerformLayout();}
         void UpdateSelected() {var item=CurrentDevice();if(item==null || (!String.IsNullOrEmpty(dataDevice)&&dataDevice!=item.IP)){values.Clear();data.Rows.Clear();value.Clear();dataDevice="";}selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name)+"  /  "+item.VersionText;SetBusy(busy);}
         DeviceResult CurrentDevice() {return devices.SelectedRows.Count==0?null:devices.SelectedRows[0].Tag as DeviceResult;}
@@ -137,7 +145,7 @@ namespace SnmptoolRAV {
             var item=adapter.SelectedItem as Adapter;
             if(item==null)throw new ArgumentException("Choose a configured IPv4 adapter.");
             if(!item.Up)throw new ArgumentException("This adapter is not connected. Connect or enable it, then refresh adapters.");
-            var options=new ScanOptions {Adapter=item,Range=IpRange.Parse(range.Text,item,routed.Checked),Community=community.Text,Version=version.SelectedIndex==0?-1:version.SelectedIndex==1?1:0,Port=(int)port.Value,Timeout=(int)timeout.Value,Retries=(int)retries.Value};options.Validate();return options;
+            var options=new ScanOptions {Adapter=item,Range=IpRange.Parse(range.Text,item,routed.Checked),Community=community.Text,Version=version.SelectedIndex==0?-1:version.SelectedIndex==1?1:version.SelectedIndex==2?0:3,V3=v3Profile,Port=(int)port.Value,Timeout=(int)timeout.Value,Retries=(int)retries.Value};options.Validate();return options;
         }
         void Error(Exception ex) {SetStatus("Operation could not finish: "+ex.Message,false);MessageBox.Show(this,ex.Message,"snmptoolRAV",MessageBoxButtons.OK,MessageBoxIcon.Error);}
         void AddDevice(DeviceResult item) {if(IsDisposed)return;results.Add(item);int index=devices.Rows.Add(item.IP,item.Name,item.Description,item.VersionText,item.Status);devices.Rows[index].Tag=item;deviceTab.Text="Devices ("+results.Count+")";UpdateSelected();}
@@ -157,7 +165,7 @@ namespace SnmptoolRAV {
             try {options=Options();rootOid=Ber.NormalizeOid(oid.Text);}catch(Exception ex){Error(ex);return;}
             values.Clear();data.Rows.Clear();value.Clear();dataDevice=device.IP;reading=true;tabs.SelectedTab=dataTab;progress.Style=ProgressBarStyle.Marquee;cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Reading "+rootOid+" from "+device.IP+" (up to 512 values / 60 seconds)...",false);
             var rows=new Progress<DataRow>(row=>AddValue(row));
-            try {var result=await Task.Run(()=>Walker.Read(new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout),IPAddress.Parse(device.IP),options.Version<0?device.Version:options.Version,options.Community,rootOid,512,row=>((IProgress<DataRow>)rows).Report(row),cancellation.Token));SetStatus(result.Rows.Count+" values. "+result.Status,result.Status.StartsWith("Read complete",StringComparison.Ordinal));}
+            try {var result=await Task.Run(()=>Walker.Read(new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout,options.V3),IPAddress.Parse(device.IP),options.Version<0?device.Version:options.Version,options.Community,rootOid,512,row=>((IProgress<DataRow>)rows).Report(row),cancellation.Token));SetStatus(result.Rows.Count+" values. "+result.Status,result.Status.StartsWith("Read complete",StringComparison.Ordinal));}
             catch(OperationCanceledException){SetStatus("Read stopped. Collected values are kept.",false);}catch(Exception ex){Error(ex);}
             finally {reading=false;progress.Style=ProgressBarStyle.Continuous;progress.Value=0;cancellation.Dispose();cancellation=null;SetBusy(false);if(closing)Close();}
         }
@@ -169,7 +177,7 @@ namespace SnmptoolRAV {
             }
         }
         internal static void Render(string directory) {
-            Directory.CreateDirectory(directory);
+            Directory.CreateDirectory(directory);V3Dialog.Render(directory);
             using(var form=new MainForm(true)) {
                 form.adapter.Items.Add(new Adapter {Name="Ethernet",Description="Configured physical or virtual network adapter",Address=IPAddress.Parse("192.168.1.10"),Mask=IPAddress.Parse("255.255.255.0"),Index=7,Up=true});form.adapter.SelectedIndex=0;form.community.Text="public";
                 form.AddDevice(new DeviceResult {IP="192.168.1.42",Name="Office printer",Description="Network printer / SNMP agent",Version=1,Status="Responding"});form.AddDevice(new DeviceResult {IP="192.168.1.80",Name="Storage",Description="Network storage appliance",Version=0,Status="Responding"});
@@ -185,7 +193,8 @@ namespace SnmptoolRAV {
                 if(form.values.Count!=0||form.data.Rows.Count!=0)throw new Exception("Previous device data was not cleared after selection changed.");
                 form.reading=true;form.SetBusy(true);
                 if(form.devices.Enabled)throw new Exception("Device selection is not locked during a data read.");
-                form.reading=false;form.SetBusy(false);form.Hide();
+                form.reading=false;form.SetBusy(false);form.tabs.SelectedTab=form.deviceTab;
+                form.v3Profile=new V3Profile{UserName="operator",AuthPassword="sample-authentication",PrivacyPassword="sample-privacy"};form.version.SelectedIndex=3;form.AddDevice(new DeviceResult{IP="192.168.1.42",Name="Office printer",Description="SNMPv3 authenticated device",Version=3,Status="Responding"});form.SetBusy(false);Application.DoEvents();SavePreview(form,directory,"v3-discovery");form.Hide();
             }
         }
         static void SavePreview(MainForm form,string directory,string name){using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new Rectangle(0,0,image.Width,image.Height));image.Save(Path.Combine(directory,name+".png"),System.Drawing.Imaging.ImageFormat.Png);}}
