@@ -24,6 +24,7 @@ namespace SnmptoolRAV {
             if(Level!=V3Level.NoAuthNoPriv&&(AuthPassword==null||Encoding.UTF8.GetByteCount(AuthPassword)<8||Encoding.UTF8.GetByteCount(AuthPassword)>1024))throw new ArgumentException("SNMPv3 authentication passphrase must contain 8 to 1024 UTF-8 bytes.");
             if(Level==V3Level.AuthPriv&&(PrivacyPassword==null||Encoding.UTF8.GetByteCount(PrivacyPassword)<8||Encoding.UTF8.GetByteCount(PrivacyPassword)>1024))throw new ArgumentException("SNMPv3 privacy passphrase must contain 8 to 1024 UTF-8 bytes.");
         }
+        public string Summary {get{string algorithm=Authentication==V3Auth.Sha256?"SHA-256":Authentication==V3Auth.Sha384?"SHA-384":Authentication==V3Auth.Sha512?"SHA-512":"SHA-1 (legacy)";return Level==V3Level.NoAuthNoPriv?"noAuthNoPriv / no authentication or encryption":Level==V3Level.AuthNoPriv?"authNoPriv / "+algorithm+" / unencrypted":"authPriv / "+algorithm+" / AES-128";}}
         public Levels Flags {get{return Level==V3Level.NoAuthNoPriv?0:Level==V3Level.AuthNoPriv?Levels.Authentication:Levels.Authentication|Levels.Privacy;}}
         public IPrivacyProvider Provider() {
             Validate(); IAuthenticationProvider auth=DefaultAuthenticationProvider.Instance;

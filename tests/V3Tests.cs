@@ -45,6 +45,7 @@ static class V3Tests {
     public static V3Profile Profile(V3Level level=V3Level.AuthPriv,V3Auth auth=V3Auth.Sha256){return new V3Profile{UserName="operator",Level=level,Authentication=auth,AuthPassword="test-authentication",PrivacyPassword="test-privacy"};}
     static void Rejected(Action action){try{action();throw new Exception("Invalid v3 input or response was accepted.");}catch(ArgumentException){}catch(SnmpSecurityException){}}
     public static void Run(){
+        Check(typeof(MessageFactory).Assembly.Location=="","SNMP library is loaded from the EXE resource, without a sidecar DLL");
         Rejected(()=>new V3Profile().Validate());Rejected(()=>new V3Profile{UserName="u",Level=V3Level.AuthNoPriv,AuthPassword="short"}.Validate());
         var none=new V3Profile{UserName="u",Level=V3Level.NoAuthNoPriv};none.Validate();Check(none.Flags==0,"noAuth profile ignores unused secrets");
         foreach(var algorithm in new[]{V3Auth.Sha256,V3Auth.Sha384,V3Auth.Sha512,V3Auth.Sha1})using(var agent=new V3Agent(Profile(V3Level.AuthPriv,algorithm))){var client=new SnmpClient(IPAddress.Loopback,0,agent.Port,500,Profile(V3Level.AuthPriv,algorithm));var reply=client.Query(IPAddress.Loopback,3,"","1.3.6.1.2.1.1.1.0",false,CancellationToken.None);Check(reply.Version==3&&reply.Values[0].Value.Display()=="Authenticated test data","Authenticated/encrypted v3 GET");client.Query(IPAddress.Loopback,3,"","1.3.6.1.2.1.1.5.0",false,CancellationToken.None);Check(agent.Discoveries==1&&agent.LegacyRequests==0,"Engine cache and no legacy fallback");}

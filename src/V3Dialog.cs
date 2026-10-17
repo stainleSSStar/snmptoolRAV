@@ -19,7 +19,7 @@ namespace SnmptoolRAV {
         static Label Label(string text,float size,bool bold){return new Label{Text=text,Dock=DockStyle.Fill,Font=new Font("Segoe UI",size,bold?FontStyle.Bold:FontStyle.Regular),ForeColor=bold?Theme.Text:Theme.Muted,TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true,Margin=new Padding(0)};}
         static void Field(TableLayoutPanel panel,int col,int row,string label,Control input){panel.Controls.Add(Label(label,9,true),col,row);panel.Controls.Add(input,col,row+1);}
         public V3Dialog(V3Profile original){
-            Text="snmptoolRAV - SNMPv3 profile";Font=new Font("Segoe UI",10);BackColor=Theme.Background;ForeColor=Theme.Text;
+            Text="snmptoolRAV - SNMPv3 profile";Icon=System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);Font=new Font("Segoe UI",10);BackColor=Theme.Background;ForeColor=Theme.Text;
             AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;ClientSize=new Size(704,528);MinimumSize=new Size(680,560);StartPosition=FormStartPosition.CenterParent;MaximizeBox=false;MinimizeBox=false;
             var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=5,Padding=new Padding(24)};root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute,42));root.RowStyles.Add(new RowStyle(SizeType.Absolute,38));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,58));root.RowStyles.Add(new RowStyle(SizeType.Absolute,44));
