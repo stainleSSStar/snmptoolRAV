@@ -11,13 +11,15 @@ using SnmptoolRAV;
 
 sealed class Agent : IDisposable {
     readonly Socket socket=new Socket(AddressFamily.InterNetwork,SocketType.Dgram,ProtocolType.Udp);
+    readonly ManualResetEventSlim ready=new ManualResetEventSlim(false);
     readonly Task loop; volatile bool stopping;
     public readonly int Port; public IPAddress LastSource; public readonly List<int> Versions=new List<int>();
     public Agent(Func<SnmpMessage,byte[]> handler) {
         socket.Bind(new IPEndPoint(IPAddress.Loopback,0));Port=((IPEndPoint)socket.LocalEndPoint).Port;
-        loop=Task.Factory.StartNew(()=>{var buffer=new byte[65535];while(!stopping){try{EndPoint endpoint=new IPEndPoint(IPAddress.Any,0);int count=socket.ReceiveFrom(buffer,ref endpoint);LastSource=((IPEndPoint)endpoint).Address;var request=SnmpMessage.Decode(buffer.Take(count).ToArray());lock(Versions)Versions.Add(request.Version);byte[] reply=handler(request);if(reply!=null)socket.SendTo(reply,endpoint);}catch(SocketException){if(!stopping)throw;}catch(ObjectDisposedException){break;}}},TaskCreationOptions.LongRunning);
+        loop=Task.Factory.StartNew(()=>{var buffer=new byte[65535];ready.Set();while(!stopping){try{EndPoint endpoint=new IPEndPoint(IPAddress.Any,0);int count=socket.ReceiveFrom(buffer,ref endpoint);LastSource=((IPEndPoint)endpoint).Address;var request=SnmpMessage.Decode(buffer.Take(count).ToArray());lock(Versions)Versions.Add(request.Version);byte[] reply=handler(request);if(reply!=null)socket.SendTo(reply,endpoint);}catch(SocketException){if(!stopping)throw;}catch(ObjectDisposedException){break;}}},TaskCreationOptions.LongRunning);
+        if(!ready.Wait(5000))throw new Exception("Mock agent did not become ready.");
     }
-    public void Dispose(){stopping=true;socket.Dispose();if(!loop.Wait(3000))throw new Exception("Mock agent did not stop.");}
+    public void Dispose(){stopping=true;socket.Dispose();if(!loop.Wait(3000))throw new Exception("Mock agent did not stop.");ready.Dispose();}
 }
 static class Tests {
     static void Check(bool condition,string reason){if(!condition)throw new Exception(reason);}
