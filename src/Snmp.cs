@@ -74,7 +74,7 @@ namespace SnmptoolRAV {
             var encoded = new List<ulong>(); ulong value = 0; int bytes = 0;
             foreach (byte b in Data) {
                 if (++bytes > 6 || value > (UInt64.MaxValue >> 7)) throw new FormatException("OID arc overflow.");
-                value = (value << 7) | (ulong)(b & 127);
+                value = (value << 7) | (uint)(b & 127);
                 if ((b & 128) == 0) { encoded.Add(value); value = 0; bytes = 0; }
             }
             if (bytes != 0 || encoded.Count == 0) throw new FormatException("Truncated OID.");
