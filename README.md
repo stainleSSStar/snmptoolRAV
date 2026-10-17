@@ -27,7 +27,7 @@ Choose **SNMP v3** in Version, then **Configure v3...**. The community field is 
 - **authPriv**: authentication plus AES-128 encryption, using separate authentication and privacy passphrases.
 - Authentication choices: **SHA-256** (default), **SHA-384**, **SHA-512**, or explicitly selected **SHA-1 (legacy)**. Privacy is **AES-128**. MD5, DES and AES-192/256 are not offered in this release.
 
-Passphrases need 8–1,024 UTF-8 bytes. Only fields needed for the selected security level are enabled. Apply the profile, then scan/read normally. Passwords remain masked unless Show passphrases is selected. Profiles, usernames and passwords are not persisted or exported; profile objects and library key caches exist only in process memory until the app exits.
+Passphrases need 8–1,024 UTF-8 bytes. Only fields needed for the selected security level are enabled. Apply the profile, then scan/read normally. Passwords remain masked unless Show passphrases is selected. Configured profile fields (including usernames and passwords) are not persisted or exported; profile objects and library key caches exist only in process memory until the app exits.
 
 The app discovers each agent's engine ID and clock before sending profile requests. It validates authentication/decryption, response security flags, username, engine, context, message/request IDs and the engine time window before accepting values. A time/engine report permits one bounded rediscovery/retry using the same profile. It never switches to weaker authentication, removes encryption or falls back to v1/v2c. Valid data replies update the cached engine clock during a scan/read.
 
@@ -55,7 +55,7 @@ An empty discovery result does **not** prove there are no devices: SNMP may be d
 
 ## CSV export
 
-**Export CSV** saves the currently selected tab: discovered devices or collected device values. Choose the path in the save dialog (initially beside the portable EXE). Export is UTF-8 with a BOM, escaped CSV fields and formula neutralization for values that could execute as spreadsheet formulas. Community strings, v3 usernames and authentication/privacy passphrases are never exported.
+**Export CSV** saves the currently selected tab: discovered devices or collected device values. Choose the path in the save dialog (initially beside the portable EXE). Export is UTF-8 with a BOM, escaped CSV fields and formula neutralization for values that could execute as spreadsheet formulas. Configured community strings, v3 usernames and authentication/privacy passphrases are never added to exports. Returned device MIB values are exported as displayed.
 
 No files are written during scanning or data reads. Results stay in memory until exported or the application closes. Changing the adapter clears results so previous devices are not queried accidentally through a different interface.
 

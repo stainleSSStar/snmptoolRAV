@@ -69,7 +69,7 @@ namespace SnmptoolRAV {
             if(header.Count!=4||header[0].Signed()<0||header[1].Signed()<484||header[2].Tag!=4||header[2].Data.Length!=1||header[3].Signed()!=3)throw new FormatException("Invalid v3 header.");
             byte flags=header[2].Data[0];if(flags>7||(flags&2)!=0&&(flags&1)==0||((flags&2)!=0?outer[3].Tag!=4:outer[3].Tag!=0x30))throw new FormatException("Invalid v3 security flags or scope encoding.");
             int p=0;var usm=Ber.Read(outer[2].Data,ref p).Children(0x30);
-            if(p!=outer[2].Data.Length||usm.Count!=6||usm[0].Tag!=4||usm[1].Tag!=2||usm[2].Tag!=2||usm[3].Tag!=4||usm[4].Tag!=4||usm[5].Tag!=4||usm[1].Data.Length>4||usm[2].Data.Length>4)throw new FormatException("Invalid v3 security parameters.");
+            if(p!=outer[2].Data.Length||usm.Count!=6||usm[0].Tag!=4||usm[1].Tag!=2||usm[2].Tag!=2||usm[3].Tag!=4||usm[4].Tag!=4||usm[5].Tag!=4||usm[1].Data.Length>4||usm[2].Data.Length>4||usm[1].Signed()<0||usm[2].Signed()<0)throw new FormatException("Invalid v3 security parameters.");
         }
         ISnmpMessage ExchangeV3(IPAddress target,byte[] bytes,int messageId,UserRegistry registry,CancellationToken cancel) {
             cancel.ThrowIfCancellationRequested();using(var socket=BoundSocket()) {
