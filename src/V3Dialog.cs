@@ -14,7 +14,7 @@ namespace SnmptoolRAV {
         readonly TextBox privacyPassword=Box("Privacy passphrase",true);
         readonly CheckBox reveal=new CheckBox{Text="Show passphrases",AutoSize=true,ForeColor=Theme.Muted};
         public V3Profile Profile {get;private set;}
-        static TextBox Box(string name,bool secret){return new TextBox{AccessibleName=name,Dock=DockStyle.Top,Font=new Font("Segoe UI",11),UseSystemPasswordChar=secret,MaxLength=secret?512:32,Margin=new Padding(0,3,16,0)};}
+        static TextBox Box(string name,bool secret){return new TextBox{AccessibleName=name,Dock=DockStyle.Top,Font=new Font("Segoe UI",11),UseSystemPasswordChar=secret,MaxLength=secret?1024:32,Margin=new Padding(0,3,16,0)};}
         static ComboBox Choice(string name){return new ComboBox{AccessibleName=name,Dock=DockStyle.Top,DropDownStyle=ComboBoxStyle.DropDownList,Font=new Font("Segoe UI",10),FlatStyle=FlatStyle.Flat,BackColor=Theme.Surface,Margin=new Padding(0,3,16,0)};}
         static Label Label(string text,float size,bool bold){return new Label{Text=text,Dock=DockStyle.Fill,Font=new Font("Segoe UI",size,bold?FontStyle.Bold:FontStyle.Regular),ForeColor=bold?Theme.Text:Theme.Muted,TextAlign=ContentAlignment.MiddleLeft,AutoEllipsis=true,Margin=new Padding(0)};}
         static void Field(TableLayoutPanel panel,int col,int row,string label,Control input){panel.Controls.Add(Label(label,9,true),col,row);panel.Controls.Add(input,col,row+1);}

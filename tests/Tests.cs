@@ -65,6 +65,7 @@ static class Tests {
         using(var agent=new Agent(r=>Reply(r,r.Values[0].Oid,Text(r.Values[0].Oid.EndsWith(".5.0")?"Mock printer":"SNMP test device")))){
             var client=new SnmpClient(IPAddress.Loopback,0,agent.Port,300);
             foreach(int version in new[]{0,1})Check(client.Query(IPAddress.Loopback,version,"test-community","1.3.6.1.2.1.1.1.0",false,CancellationToken.None).Values[0].Value.Display()=="SNMP test device","Real UDP v1/v2c exchange");
+            Check(client.Query(IPAddress.Loopback,1,"test-community"," .1.03.6.1.2.1.1.1.0 ",false,CancellationToken.None)!=null,"Normalize accepted OID syntax before matching response bindings");
             Check(agent.LastSource.Equals(IPAddress.Loopback),"UDP bound to chosen source IPv4");
             var loop=Adapter.List().FirstOrDefault(a=>a.Address.Equals(IPAddress.Loopback));
             if(loop!=null){var bound=new SnmpClient(loop.Address,loop.Index,agent.Port,300);Check(bound.Query(IPAddress.Loopback,1,"test-community","1.3.6.1.2.1.1.1.0",false,CancellationToken.None)!=null,"Windows IP_UNICAST_IF binding works with actual interface index");}
@@ -88,6 +89,10 @@ static class Tests {
             var capped=Walker.Read(new SnmpClient(IPAddress.Loopback,0,agent.Port,300),IPAddress.Loopback,0,"read-test","1.3.6.1.2.1.1",1,row=>{},CancellationToken.None);Check(capped.Rows.Count==1&&capped.Status.StartsWith("Stopped at 1"),"Walk row cap and v1 support");
         }
         using(var agent=new Agent(r=>Reply(r,r.Values[0].Oid,Text("repeated")))){var result=Walker.Read(new SnmpClient(IPAddress.Loopback,0,agent.Port,300),IPAddress.Loopback,1,"test","1.3.6.1.2.1.1",100,row=>{},CancellationToken.None);Check(result.Rows.Count==0&&result.Status.Contains("out-of-order"),"Stop non-progressing agents");}
+        foreach(byte tag in new byte[]{0x80,0x81,0x82})using(var agent=new Agent(r=>Reply(r,r.Values[0].Oid,new Ber(tag,new byte[0])))){
+            var result=Walker.Read(new SnmpClient(IPAddress.Loopback,0,agent.Port,300),IPAddress.Loopback,1,"test","1.3.6.1.2.1.1",100,row=>{},CancellationToken.None);
+            Check(result.Rows.Count==0&&(tag==0x82?result.Status.StartsWith("Read complete"):result.Status.Contains("partial")),"Only endOfMibView completes a walk; missing objects/instances are reported as partial");
+        }
     }
     static int Main(){Embedded.Initialize();return Run();}
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

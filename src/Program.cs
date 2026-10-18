@@ -29,7 +29,7 @@ namespace SnmptoolRAV {
         readonly NumericUpDown retries = Number("Retries per version",0,2,0);
         readonly ActionButton profileButton = new ActionButton("Configure v3...",false);
         readonly Label profileNote = TextLabel("Auto: v2c then v1. Secrets stay in memory; v3 uses a separate profile.",8,false);
-        V3Profile v3Profile;bool wasV3;
+        V3Profile v3Profile;
         readonly CheckBox routed = new CheckBox { Text = "Routed / VPN subnet", AutoSize = true, ForeColor = Theme.Muted, AccessibleName = "Allow the entered routed or VPN subnet" };
         readonly CheckBox show = new CheckBox { Text = "Show", AutoSize = true, ForeColor = Theme.Muted };
         readonly Label adapterInfo = TextLabel("Choose a configured IPv4 adapter. Virtual adapters are included.",9,false);
@@ -47,6 +47,9 @@ namespace SnmptoolRAV {
         readonly TabControl tabs = new TabControl { Dock=DockStyle.Fill, Font=new Font("Segoe UI",10) };
         readonly TabPage deviceTab = new TabPage("Devices (0)");
         readonly TabPage dataTab = new TabPage("Device data");
+        readonly Label emptyDevices = TextLabel("No devices yet.\r\nChoose an adapter and credentials, then click Scan subnet.",11,false);
+        readonly ActionButton copyValue = new ActionButton("Copy value",false);
+        readonly Label valueInfo = TextLabel("Select a row to inspect its full value.",9,false);
         readonly DataGridView devices = Grid();
         readonly DataGridView data = Grid();
         readonly TextBox value = new TextBox { ReadOnly=true, Multiline=true, ScrollBars=ScrollBars.Both, WordWrap=false, Dock=DockStyle.Fill, BorderStyle=BorderStyle.FixedSingle, Font=new Font("Segoe UI",10), AccessibleName="Selected SNMP value" };
@@ -79,7 +82,7 @@ namespace SnmptoolRAV {
             ClientSize=new Size(1080,720); MinimumSize=new Size(960,700); StartPosition=FormStartPosition.CenterScreen;
             root=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=1, RowCount=6, Padding=new Padding(22), BackColor=Theme.Background };
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-            foreach (var style in new[] {new RowStyle(SizeType.Absolute,64),new RowStyle(SizeType.Absolute,224),new RowStyle(SizeType.Absolute,56),new RowStyle(SizeType.Percent,100),new RowStyle(SizeType.Absolute,8),new RowStyle(SizeType.Absolute,44)}) root.RowStyles.Add(style);
+            foreach (var style in new[] {new RowStyle(SizeType.Absolute,64),new RowStyle(SizeType.Absolute,224),new RowStyle(SizeType.Absolute,56),new RowStyle(SizeType.Percent,100),new RowStyle(SizeType.Absolute,8),new RowStyle(SizeType.Absolute,58)}) root.RowStyles.Add(style);
             var header=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=3, Margin=new Padding(0) }; header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,65)); header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,35));header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,64));
             header.Controls.Add(TextLabel("snmptoolRAV",23,true),0,0); header.Controls.Add(connectionToggle,1,0);var about=new LinkLabel{Text="About",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleRight,LinkColor=Theme.Accent};about.LinkClicked+=delegate{MessageBox.Show(this,"snmptoolRAV / SNMPv3 edition\r\n\r\n"+Embedded.Notices(),"About / third-party licenses",MessageBoxButtons.OK,MessageBoxIcon.Information);};header.Controls.Add(about,2,0);root.Controls.Add(header,0,0);
             settings=new Card { Dock=DockStyle.Fill, Margin=new Padding(0,0,0,12), Padding=new Padding(18,12,18,12) };
@@ -93,8 +96,8 @@ namespace SnmptoolRAV {
             fields.Controls.Add(show,1,5);
             fields.Controls.Add(profileNote,2,5);fields.SetColumnSpan(profileNote,4);
             community.UseSystemPasswordChar=true; show.CheckedChanged+=delegate {community.UseSystemPasswordChar=!show.Checked;}; version.Items.AddRange(new object[] {"Auto (v2c / v1)","SNMP v2c","SNMP v1","SNMP v3"}); version.SelectedIndex=0;
-            version.SelectedIndexChanged+=delegate{UpdateProfileControls();};
-            profileButton.Click+=delegate{using(var dialog=new V3Dialog(v3Profile)){if(dialog.ShowDialog(this)==DialogResult.OK){v3Profile=dialog.Profile;values.Clear();data.Rows.Clear();value.Clear();dataDevice="";UpdateProfileControls();SetBusy(busy);}}};
+            version.SelectedIndexChanged+=delegate{ClearResults();UpdateProfileControls();SetStatus("SNMP version changed. Scan again with the selected settings.",false);};
+            profileButton.Click+=delegate{using(var dialog=new V3Dialog(v3Profile)){if(dialog.ShowDialog(this)==DialogResult.OK){v3Profile=dialog.Profile;ClearResults();UpdateProfileControls();SetStatus("SNMPv3 profile applied. Scan to verify device access.",false);}}};
             settings.Controls.Add(fields); root.Controls.Add(settings,0,1);
             var actions=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=6, Margin=new Padding(0,0,0,12) };
             foreach (int width in new[] {160,78,154,194,0,142}) actions.ColumnStyles.Add(width==0?new ColumnStyle(SizeType.Percent,100):new ColumnStyle(SizeType.Absolute,width));
@@ -103,15 +106,19 @@ namespace SnmptoolRAV {
             root.Controls.Add(actions,0,2);
             Columns(devices,"IP address","Name","Description","SNMP","Status"); devices.Columns[0].FillWeight=17; devices.Columns[1].FillWeight=23; devices.Columns[2].FillWeight=42; devices.Columns[3].FillWeight=9; devices.Columns[4].FillWeight=17;
             Columns(data,"OID","Field","Type","Value"); data.Columns[0].FillWeight=30; data.Columns[1].FillWeight=24; data.Columns[2].FillWeight=12; data.Columns[3].FillWeight=44;
-            deviceTab.BackColor=dataTab.BackColor=Theme.Surface; deviceTab.Padding=dataTab.Padding=new Padding(12); deviceTab.Controls.Add(devices);
-            var details=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=1, RowCount=4 }; details.RowStyles.Add(new RowStyle(SizeType.Absolute,26)); details.RowStyles.Add(new RowStyle(SizeType.Absolute,42)); details.RowStyles.Add(new RowStyle(SizeType.Percent,100)); details.RowStyles.Add(new RowStyle(SizeType.Absolute,64)); details.Controls.Add(selected,0,0);
+            deviceTab.BackColor=dataTab.BackColor=Theme.Surface; deviceTab.Padding=dataTab.Padding=new Padding(12); var deviceResults=new Panel{Dock=DockStyle.Fill};deviceResults.Controls.Add(devices);emptyDevices.TextAlign=ContentAlignment.MiddleCenter;deviceResults.Controls.Add(emptyDevices);emptyDevices.BringToFront();deviceTab.Controls.Add(deviceResults);
+            devices.AccessibleName="Discovered SNMP devices";data.AccessibleName="Device OIDs and values";devices.ShowCellToolTips=data.ShowCellToolTips=true;
+            var details=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=1, RowCount=5 }; details.RowStyles.Add(new RowStyle(SizeType.Absolute,26)); details.RowStyles.Add(new RowStyle(SizeType.Absolute,42)); details.RowStyles.Add(new RowStyle(SizeType.Percent,100)); details.RowStyles.Add(new RowStyle(SizeType.Absolute,34)); details.RowStyles.Add(new RowStyle(SizeType.Absolute,72)); details.Controls.Add(selected,0,0);
             var query=new TableLayoutPanel { Dock=DockStyle.Fill, ColumnCount=3, Margin=new Padding(0) }; query.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,174)); query.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100)); query.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,142));
-            preset.Items.AddRange(new object[] {"System information","Printer MIB","Host devices","Standard MIB-II","Custom OID"}); preset.SelectedIndex=0; oid.Text="1.3.6.1.2.1.1"; readData.Dock=DockStyle.Fill; readData.Margin=new Padding(0,0,0,7); query.Controls.Add(preset,0,0); query.Controls.Add(oid,1,0); query.Controls.Add(readData,2,0); details.Controls.Add(query,0,1); details.Controls.Add(data,0,2); details.Controls.Add(value,0,3); dataTab.Controls.Add(details);
+            preset.Items.AddRange(new object[] {"System information","Printer MIB","Host devices","Standard MIB-II","Custom OID"}); preset.SelectedIndex=0; oid.Text="1.3.6.1.2.1.1"; readData.Dock=DockStyle.Fill; readData.Margin=new Padding(0,0,0,7); query.Controls.Add(preset,0,0); query.Controls.Add(oid,1,0); query.Controls.Add(readData,2,0); details.Controls.Add(query,0,1); details.Controls.Add(data,0,2); var valueActions=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,Margin=new Padding(0)};valueActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));valueActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,136));valueActions.Controls.Add(valueInfo,0,0);copyValue.Dock=DockStyle.Fill;copyValue.Margin=new Padding(0,2,0,2);valueActions.Controls.Add(copyValue,1,0);details.Controls.Add(valueActions,0,3);details.Controls.Add(value,0,4); dataTab.Controls.Add(details);
             tabs.TabPages.AddRange(new[] {deviceTab,dataTab}); root.Controls.Add(tabs,0,3); root.Controls.Add(progress,0,4); root.Controls.Add(status,0,5); Controls.Add(root);
             adapter.SelectedIndexChanged+=delegate { AdapterChanged(); };
             devices.SelectionChanged+=delegate {UpdateSelected();};
             devices.SortCompare+=delegate(object sender,DataGridViewSortCompareEventArgs e) { if (e.Column.Index==0) { e.SortResult=IpRange.Number(IPAddress.Parse(Convert.ToString(e.CellValue1))).CompareTo(IpRange.Number(IPAddress.Parse(Convert.ToString(e.CellValue2)))); e.Handled=true; } };
-            data.SelectionChanged+=delegate { value.Text=data.SelectedRows.Count==0?"":Convert.ToString(data.SelectedRows[0].Cells[3].Value); };
+            data.SortCompare+=delegate(object sender,DataGridViewSortCompareEventArgs e){if(e.Column.Index==0){e.SortResult=Walker.CompareOid(Convert.ToString(e.CellValue1),Convert.ToString(e.CellValue2));e.Handled=true;}};
+            data.SelectionChanged+=delegate { value.Text=data.SelectedRows.Count==0?"":Convert.ToString(data.SelectedRows[0].Cells[3].Value);copyValue.Enabled=value.Text.Length>0; };
+            copyValue.Click+=delegate{try{if(value.Text.Length>0)Clipboard.SetText(value.Text);}catch(Exception ex){Error(ex);}};
+            devices.CellDoubleClick+=async delegate(object sender,DataGridViewCellEventArgs e){if(e.RowIndex>=0&&!busy&&CurrentDevice()!=null)await ReadData();};
             preset.SelectedIndexChanged+=delegate { string[] roots={"1.3.6.1.2.1.1","1.3.6.1.2.1.43","1.3.6.1.2.1.25.3","1.3.6.1.2.1"}; if (preset.SelectedIndex<roots.Length) oid.Text=roots[preset.SelectedIndex]; };
             start.Click+=async delegate {await Scan();}; stop.Click+=delegate {if(cancellation!=null)cancellation.Cancel();}; refresh.Click+=delegate {LoadAdapters();};
             read.Click+=async delegate {tabs.SelectedTab=dataTab;await ReadData();}; readData.Click+=async delegate {await ReadData();}; export.Click+=delegate {ExportCsv();};
@@ -121,13 +128,16 @@ namespace SnmptoolRAV {
             FormClosing+=delegate(object sender,FormClosingEventArgs e) {if(busy){e.Cancel=true;closing=true;if(cancellation!=null)cancellation.Cancel();SetStatus("Stopping network requests...",false);}};
             SetBusy(false);
         }
-        void UpdateProfileControls(){bool v3=version.SelectedIndex==3;if(v3!=wasV3){results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();dataDevice="";deviceTab.Text="Devices (0)";wasV3=v3;}community.Visible=show.Visible=!v3;profileButton.Visible=v3;profileButton.Text=v3Profile==null?"Configure v3...":"Edit v3 profile...";profileNote.Text=v3?(v3Profile==null?"Configure a v3 user, authentication and privacy profile. No community fallback.":"V3 only / "+v3Profile.Summary+". No fallback."):"Auto: v2c then v1. Community stays in memory; v1/v2c send it unencrypted.";tips.SetToolTip(profileNote,profileNote.Text);}
+        void ClearValues() {values.Clear();data.Rows.Clear();value.Clear();dataDevice="";dataTab.Text="Device data";valueInfo.Text="Select a row to inspect its full value.";copyValue.Enabled=false;}
+        void ClearResults() {results.Clear();ClearValues();devices.Rows.Clear();deviceTab.Text="Devices (0)";emptyDevices.Visible=true;UpdateSelected();}
+        void UpdateProfileControls(){bool v3=version.SelectedIndex==3;community.Visible=show.Visible=!v3;profileButton.Visible=v3;profileButton.Text=v3Profile==null?"Configure v3...":"Edit v3 profile...";profileNote.Text=v3?(v3Profile==null?"Configure a v3 user, authentication and privacy profile. No community fallback.":"V3 only / "+v3Profile.Summary+". No fallback."):"Auto: v2c then v1. Community stays in memory; v1/v2c send it unencrypted.";tips.SetToolTip(profileNote,profileNote.Text);SetBusy(busy);}
         void SetSettingsVisible(bool visible) {settingsVisible=visible;settings.Visible=visible;root.RowStyles[1].Height=visible?224:0;connectionToggle.Text=visible?"Hide connection settings":"Show connection settings";root.PerformLayout();}
-        void UpdateSelected() {var item=CurrentDevice();if(item==null || (!String.IsNullOrEmpty(dataDevice)&&dataDevice!=item.IP)){values.Clear();data.Rows.Clear();value.Clear();dataDevice="";}selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name)+"  /  "+item.VersionText;SetBusy(busy);}
+        void UpdateSelected() {var item=CurrentDevice();if(item==null || (!String.IsNullOrEmpty(dataDevice)&&dataDevice!=item.IP)){ClearValues();}selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name)+"  /  "+item.VersionText;tips.SetToolTip(selected,selected.Text);SetBusy(busy);}
         DeviceResult CurrentDevice() {return devices.SelectedRows.Count==0?null:devices.SelectedRows[0].Tag as DeviceResult;}
         void SetStatus(string text,bool success) {status.Text=text;status.ForeColor=success?Theme.Success:Theme.Muted;tips.SetToolTip(status,text);}
         void SetBusy(bool valueBusy) {
             busy=valueBusy;devices.Enabled=!busy||!reading;progress.Visible=busy;settings.Enabled=refresh.Enabled=start.Enabled=!busy;stop.Enabled=busy;
+            copyValue.Enabled=value.Text.Length>0;
             read.Enabled=readData.Enabled=!busy&&CurrentDevice()!=null; preset.Enabled=oid.Enabled=!busy;
             export.Enabled=!busy&&(tabs.SelectedTab==dataTab?values.Count>0:results.Count>0);
         }
@@ -135,10 +145,10 @@ namespace SnmptoolRAV {
             var item=adapter.SelectedItem as Adapter; if(item==null)return;
             try {range.Text=item.DefaultRange();adapterInfo.Text=item.Description+"  |  Mask "+item.Mask+"  |  Interface "+item.Index;tips.SetToolTip(adapterInfo,adapterInfo.Text);}
             catch(Exception ex){SetStatus(ex.Message,false);}
-            routed.Checked=false;results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();deviceTab.Text="Devices (0)";SetBusy(false);
+            routed.Checked=false;ClearResults();SetStatus("Adapter selected. Review the subnet and credentials, then scan.",false);
         }
         void LoadAdapters() {
-            try {results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();deviceTab.Text="Devices (0)";adapter.Items.Clear();foreach(var item in Adapter.List())adapter.Items.Add(item);if(adapter.Items.Count>0)adapter.SelectedIndex=0;else SetStatus("No configured IPv4 adapters found. Configure an adapter, then refresh.",false);}
+            try {ClearResults();adapter.Items.Clear();foreach(var item in Adapter.List())adapter.Items.Add(item);if(adapter.Items.Count>0)adapter.SelectedIndex=0;else SetStatus("No configured IPv4 adapters found. Configure an adapter, then refresh.",false);}
             catch(Exception ex){Error(ex);}
         }
         ScanOptions Options() {
@@ -148,22 +158,22 @@ namespace SnmptoolRAV {
             var options=new ScanOptions {Adapter=item,Range=IpRange.Parse(range.Text,item,routed.Checked),Community=community.Text,Version=version.SelectedIndex==0?-1:version.SelectedIndex==1?1:version.SelectedIndex==2?0:3,V3=v3Profile,Port=(int)port.Value,Timeout=(int)timeout.Value,Retries=(int)retries.Value};options.Validate();return options;
         }
         void Error(Exception ex) {SetStatus("Operation could not finish: "+ex.Message,false);MessageBox.Show(this,ex.Message,"snmptoolRAV",MessageBoxButtons.OK,MessageBoxIcon.Error);}
-        void AddDevice(DeviceResult item) {if(IsDisposed)return;results.Add(item);int index=devices.Rows.Add(item.IP,item.Name,item.Description,item.VersionText,item.Status);devices.Rows[index].Tag=item;deviceTab.Text="Devices ("+results.Count+")";UpdateSelected();}
-        void AddValue(DataRow row) {if(IsDisposed)return;values.Add(row);data.Rows.Add(row.Oid,row.Name,row.Type,row.Value);}
+        void AddDevice(DeviceResult item) {if(IsDisposed)return;results.Add(item);int index=devices.Rows.Add(item.IP,item.Name,item.Description,item.VersionText,item.Status);devices.Rows[index].Tag=item;deviceTab.Text="Devices ("+results.Count+")";emptyDevices.Visible=false;UpdateSelected();}
+        void AddValue(DataRow row) {if(IsDisposed)return;values.Add(row);data.Rows.Add(row.Oid,row.Name,row.Type,row.Value);dataTab.Text="Device data ("+values.Count+")";valueInfo.Text=values.Count+" values / select a row to inspect or copy";}
         async Task Scan() {
             ScanOptions options;try {options=Options();}catch(Exception ex){Error(ex);return;}
-            results.Clear();values.Clear();devices.Rows.Clear();data.Rows.Clear();deviceTab.Text="Devices (0)";tabs.SelectedTab=deviceTab;progress.Value=0;
+            ClearResults();tabs.SelectedTab=deviceTab;progress.Value=0;range.Text=options.Range.ToString();emptyDevices.Text="Scanning "+options.Range+"...\r\nDevices appear here as they respond. Use Stop to keep partial results.";
             cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Scanning "+options.Range+" through "+options.Adapter.Name+"...",false);
             var found=new Progress<DeviceResult>(item=>AddDevice(item));
             var report=new Progress<ScanProgress>(p=>{if(IsDisposed)return;progress.Value=Math.Min(100,(int)(100L*p.Completed/p.Total));SetStatus(p.Completed+" / "+p.Total+" IPs checked  |  "+p.Found+" SNMP devices  |  "+p.Errors+" network/response errors",false);});
             try {var summary=await Task.Run(()=>Scanner.Scan(options,item=>((IProgress<DeviceResult>)found).Report(item),p=>((IProgress<ScanProgress>)report).Report(p),cancellation.Token));SetStatus("Complete: "+summary.Completed+" IPs checked / "+summary.Found+" SNMP devices / "+summary.Errors+" errors. No reply: check community, version, UDP access and device SNMP settings.",summary.Errors==0);}
             catch(OperationCanceledException){SetStatus("Scan stopped. Discovered devices are kept.",false);}catch(Exception ex){Error(ex);}
-            finally {cancellation.Dispose();cancellation=null;SetBusy(false);if(closing)Close();}
+            finally {emptyDevices.Text="No SNMP devices found.\r\nCheck the adapter, credentials, version and device SNMP/firewall settings.";cancellation.Dispose();cancellation=null;SetBusy(false);if(closing)Close();}
         }
         async Task ReadData() {
             var device=CurrentDevice();if(device==null)return;ScanOptions options;string rootOid;
             try {options=Options();rootOid=Ber.NormalizeOid(oid.Text);}catch(Exception ex){Error(ex);return;}
-            values.Clear();data.Rows.Clear();value.Clear();dataDevice=device.IP;reading=true;tabs.SelectedTab=dataTab;progress.Style=ProgressBarStyle.Marquee;cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Reading "+rootOid+" from "+device.IP+" (up to 512 values / 60 seconds)...",false);
+            ClearValues();dataDevice=device.IP;reading=true;tabs.SelectedTab=dataTab;progress.Style=ProgressBarStyle.Marquee;cancellation=new CancellationTokenSource();SetBusy(true);SetStatus("Reading "+rootOid+" from "+device.IP+" (up to 512 values / 60 seconds)...",false);
             var rows=new Progress<DataRow>(row=>AddValue(row));
             try {var result=await Task.Run(()=>Walker.Read(new SnmpClient(options.Adapter.Address,options.Adapter.Index,options.Port,options.Timeout,options.V3),IPAddress.Parse(device.IP),options.Version<0?device.Version:options.Version,options.Community,rootOid,512,row=>((IProgress<DataRow>)rows).Report(row),cancellation.Token));SetStatus(result.Rows.Count+" values. "+result.Status,result.Status.StartsWith("Read complete",StringComparison.Ordinal));}
             catch(OperationCanceledException){SetStatus("Read stopped. Collected values are kept.",false);}catch(Exception ex){Error(ex);}
@@ -194,7 +204,20 @@ namespace SnmptoolRAV {
                 form.reading=true;form.SetBusy(true);
                 if(form.devices.Enabled)throw new Exception("Device selection is not locked during a data read.");
                 form.reading=false;form.SetBusy(false);form.tabs.SelectedTab=form.deviceTab;
-                form.v3Profile=new V3Profile{UserName="operator",AuthPassword="sample-authentication",PrivacyPassword="sample-privacy"};form.version.SelectedIndex=3;form.AddDevice(new DeviceResult{IP="192.168.1.42",Name="Office printer",Description="SNMPv3 authenticated device",Version=3,Status="Responding"});form.SetBusy(false);Application.DoEvents();SavePreview(form,directory,"v3-discovery");form.Hide();
+                form.AddValue(new DataRow{Oid="1.3.6.1.2.1.1.10.0",Name="Ten",Type="String",Value="Full value"});
+                form.AddValue(new DataRow{Oid="1.3.6.1.2.1.1.9.0",Name="Nine",Type="String",Value="Another value"});
+                form.data.Sort(form.data.Columns[0],System.ComponentModel.ListSortDirection.Ascending);
+                if(Convert.ToString(form.data.Rows[0].Cells[0].Value)!="1.3.6.1.2.1.1.9.0")throw new Exception("OID column is not sorted numerically.");
+                form.dataDevice="192.168.1.80";form.value.Text="Previous secret value";
+                form.version.SelectedIndex=3;
+                if(form.results.Count!=0||form.values.Count!=0||form.value.Text.Length!=0||form.dataDevice.Length!=0||form.read.Enabled||form.export.Enabled||form.copyValue.Enabled)throw new Exception("Changing protocol left stale device/value actions enabled.");
+                if(!form.emptyDevices.Visible)throw new Exception("Empty discovery guidance is hidden.");
+                SavePreview(form,directory,"empty-discovery");
+                form.v3Profile=new V3Profile{UserName="operator",AuthPassword="sample-authentication",PrivacyPassword="sample-privacy"};form.UpdateProfileControls();form.AddDevice(new DeviceResult{IP="192.168.1.42",Name="Office printer",Description="SNMPv3 authenticated device",Version=3,Status="Responding"});form.SetBusy(false);Application.DoEvents();SavePreview(form,directory,"v3-discovery");
+                form.AddValue(new DataRow{Oid="1.3.6.1.2.1.1.1.0",Name="Description",Type="String",Value="Old adapter value"});form.dataDevice="192.168.1.42";form.value.Text="Old adapter value";
+                form.AdapterChanged();
+                if(form.value.Text.Length!=0||form.values.Count!=0||form.dataDevice.Length!=0||form.copyValue.Enabled||form.read.Enabled)throw new Exception("Changing adapter left stale values or actions.");
+                form.Hide();
             }
         }
         static void SavePreview(MainForm form,string directory,string name){using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new Rectangle(0,0,image.Width,image.Height));image.Save(Path.Combine(directory,name+".png"),System.Drawing.Imaging.ImageFormat.Png);}}
