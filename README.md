@@ -11,7 +11,7 @@ Download `snmptoolRAV.exe` from [Releases](https://github.com/stainleSSStar/snmp
 3. Enter **Community**. It is masked by default; **Show** reveals it. The app does not save it in configuration files, CSV exports, logs or release assets. Community-based SNMP v1/v2c transmits this name unencrypted on the selected network.
 4. Leave **Version** on **Auto** to try v2c, then v1 only if no matching response arrives, or explicitly choose either version. Select **SNMP v3** for a separate username/authentication/privacy profile. Auto tries only community-based v2c/v1; it never attempts or falls back from v3.
 5. Leave **UDP port** at 161 unless your device uses another port. Adjust reply timeout (100–5,000 ms) and retries (0–2 per version during discovery) if needed.
-6. Click **Scan subnet**. Requests are sent only after you click; starting the app only reads local adapter configuration. **Stop** cancels outstanding polling and preserves discovered devices.
+6. Click **Scan subnet**. Requests are sent only after you click; starting the app only reads local adapter configuration. **Stop** cancels outstanding polling and preserves discovered devices, including a confirmed responder whose optional name lookup is interrupted.
 
 The app sends read-only SNMP GET/GETNEXT requests, plus SNMPv3 engine discovery. It does not change device settings, use SET requests, select additional subnets automatically, require ping replies, change routes or install services. IPv4 packets are bound to the selected source address and Windows `IP_UNICAST_IF` interface index. A binding failure is shown rather than silently switching to another adapter. Routing/firewall restrictions on a virtual interface may still prevent access to devices.
 
@@ -37,7 +37,7 @@ The embedded dependency is [SharpSNMP 12.5.7](https://www.nuget.org/packages/Lex
 
 ## Read device data
 
-Select a discovered device, then click **Read selected device**. Connection settings collapse automatically in the data tab to give the table more space; use **Show connection settings** at the top to change the community, version or adapter. In **Device data**, choose a subtree and click **Read data**:
+Select a discovered device, then click **Read selected device** (or double-click its row). Connection settings collapse automatically in the data tab to give the table more space; use **Show connection settings** at the top to change the community, version or adapter. In **Device data**, choose a subtree and click **Read data**:
 
 | Preset | Numeric subtree | Typical data |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ Select a discovered device, then click **Read selected device**. Connection sett
 | Standard MIB-II | `1.3.6.1.2.1` | Broader standard device information |
 | Custom OID | Enter any numeric subtree | Vendor-specific or narrower tables exposed by your device |
 
-The OID field is editable for every preset. Results show numeric OID, a friendly field label where known, the returned ASN.1 type and the raw value. Select a value to copy its full contents from the text area. Values retain their units/codes: printer supply levels can be negative special values, and counters are not automatically assumed to be percentages or pages. Printer-MIB implementation varies by device and community access policy; fields that an agent does not expose cannot be collected.
+The OID field is editable for every preset. Results show numeric OID, a friendly field label where known, the returned ASN.1 type and the raw value. Select a row to inspect its full contents in the text area and use **Copy value**. OIDs sort numerically when you click their column header. Values retain their units/codes: printer supply levels can be negative special values, and counters are not automatically assumed to be percentages or pages. Printer-MIB implementation varies by device and community access policy; fields that an agent does not expose cannot be collected.
 
 Reads use the selected source adapter, current community, selected/auto-discovered version and current UDP port. Each GETNEXT walk stops at the subtree boundary, agent error/end-of-MIB, 512 values, 60 seconds or user cancellation. Non-progressing OIDs stop the walk. Timeout, truncation and partial-data conditions are reported; a capped read is not described as complete. Select a narrower OID to read a particular table. Discovery retries apply only to discovery; data walks stop on a timed-out request and preserve collected values.
 
@@ -57,11 +57,23 @@ An empty discovery result does **not** prove there are no devices: SNMP may be d
 
 **Export CSV** saves the currently selected tab: discovered devices or collected device values. Choose the path in the save dialog (initially beside the portable EXE). Export is UTF-8 with a BOM, escaped CSV fields and formula neutralization for values that could execute as spreadsheet formulas. Configured community strings, v3 usernames and authentication/privacy passphrases are never added to exports. Returned device MIB values are exported as displayed.
 
-No files are written during scanning or data reads. Results stay in memory until exported or the application closes. Changing the adapter clears results so previous devices are not queried accidentally through a different interface.
+No files are written during scanning or data reads. Results stay in memory until exported or the application closes. Changing the adapter, SNMP version or v3 profile clears results and the value viewer so previous data cannot be mistaken for results from the new connection settings.
+
+## Tests without EXE builds
+
+On Windows with .NET Framework 4.8, run:
+
+```powershell
+powershell -STA -NoProfile -ExecutionPolicy Bypass -File .\test.ps1
+```
+
+This compiles the protocol tests and application sources as DLLs under `.build/checks`, runs the loopback protocol suite and renders real WinForms previews with UI regression checks. It does not call `build.ps1`, create EXEs or write release assets. The pinned dependency is downloaded and its checksum verified on first use. UI previews are saved under `.build/checks/ui-previews`. Pull requests and ordinary pushes use this test-only path in CI.
+
+The independent Linux Net-SNMP suite runs with `bash tests/interop/run.sh` (requires .NET 8 SDK and `snmpd`). Its managed test DLL runs through `dotnet`, with native apphost generation disabled.
 
 ## Build and verify
 
-On Windows:
+To explicitly build the portable application on Windows:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test

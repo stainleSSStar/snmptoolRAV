@@ -83,7 +83,10 @@ namespace SnmptoolRAV {
                                 try {
                                     var name = client.Query(ip,version,options.Community,"1.3.6.1.2.1.1.5.0",false,cancel);
                                     if (name != null && name.Error == 0 && name.Values[0].Value.Tag == 4) result.Name = name.Values[0].Value.Display();
-                                } catch (SocketException) { result.Status = "Responding; name unavailable"; }
+                                } catch (OperationCanceledException) { result.Status = "Responding; name lookup stopped"; }
+                                catch (SnmpSecurityException ex) { Interlocked.Increment(ref errors); result.Status = "Responding; name unavailable: " + ex.Status; }
+                                catch (SocketException) { Interlocked.Increment(ref errors); result.Status = "Responding; name unavailable"; }
+                                catch (FormatException) { Interlocked.Increment(ref errors); result.Status = "Responding; invalid name response"; }
                                 Interlocked.Increment(ref responders); found(result); break;
                             }
                         } catch (OperationCanceledException) { break; }
@@ -117,7 +120,8 @@ namespace SnmptoolRAV {
                 if (reply==null) { result.Status="Device did not reply; collected data is partial."; return result; }
                 if (reply.Error!=0) { result.Status=version==0 && reply.Error==2 ? "End of accessible MIB (SNMPv1)." : "SNMP error " + reply.Error + "; collected data may be partial."; return result; }
                 var binding=reply.Values[0];
-                if (binding.Value.Tag==0x80 || binding.Value.Tag==0x81 || binding.Value.Tag==0x82 || !(binding.Oid==root || binding.Oid.StartsWith(root+".",StringComparison.Ordinal))) { result.Status="Read complete. End of accessible subtree."; return result; }
+                if (binding.Value.Tag==0x80 || binding.Value.Tag==0x81) { result.Status="Device returned "+binding.Value.Display()+"; collected data may be partial."; return result; }
+                if (binding.Value.Tag==0x82 || !(binding.Oid==root || binding.Oid.StartsWith(root+".",StringComparison.Ordinal))) { result.Status="Read complete. End of accessible subtree."; return result; }
                 if (CompareOid(binding.Oid,cursor)<=0) { result.Status="Stopped: device returned a repeated or out-of-order OID. Data is partial."; return result; }
                 var row=new DataRow { Oid=binding.Oid, Name=Mib.Name(binding.Oid), Type=binding.Value.TypeName, Value=binding.Value.Display() };
                 result.Rows.Add(row); onRow(row); cursor=binding.Oid;

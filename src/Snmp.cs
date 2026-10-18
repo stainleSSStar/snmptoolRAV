@@ -140,6 +140,7 @@ namespace SnmptoolRAV {
             } catch { socket.Dispose(); throw; }
         }
         public SnmpMessage Query(IPAddress target, int version, string community, string oid, bool next, CancellationToken cancel) {
+            oid = Ber.NormalizeOid(oid);
             if(version==3)return QueryV3(target,oid,next,cancel);
             cancel.ThrowIfCancellationRequested(); int request = Interlocked.Increment(ref nextRequest) & Int32.MaxValue;
             var expectedCommunity = Encoding.UTF8.GetBytes(community);
