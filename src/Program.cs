@@ -23,7 +23,7 @@ namespace SnmptoolRAV {
         readonly ComboBox adapter = Choice("Network adapter");
         readonly TextBox range = Input("IPv4 subnet");
         readonly TextBox community = Input("SNMP community");
-        readonly ComboBox version = Choice("SNMP version (optional)");
+        readonly ComboBox version = Choice("SNMP version");
         readonly NumericUpDown port = Number("UDP port",1,65535,161);
         readonly NumericUpDown timeout = Number("Reply timeout in milliseconds",100,5000,600);
         readonly NumericUpDown retries = Number("Retries per version",0,2,0);
@@ -60,6 +60,7 @@ namespace SnmptoolRAV {
         readonly TableLayoutPanel root;
         readonly LinkLabel connectionToggle = new LinkLabel { Text="Hide connection settings", Dock=DockStyle.Fill, TextAlign=ContentAlignment.MiddleRight, LinkColor=Theme.Accent, ActiveLinkColor=Theme.Accent, AccessibleName="Show or hide connection settings" };
         bool settingsVisible=true;
+        float settingsHeight=224;
         readonly bool preview;
         CancellationTokenSource cancellation;
         bool busy,closing,reading;
@@ -91,7 +92,7 @@ namespace SnmptoolRAV {
             foreach (int height in new[] {22,35,28,22,36,35}) fields.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
             Field(fields,0,0,"Network adapter / IPv4 address",adapter); fields.SetColumnSpan(adapter,6); fields.SetColumnSpan(fields.GetControlFromPosition(0,0),6);
             fields.Controls.Add(adapterInfo,0,2); fields.SetColumnSpan(adapterInfo,6);
-            Field(fields,0,3,"IPv4 subnet (CIDR)",range); var credentials=new Panel{Dock=DockStyle.Fill,Margin=new Padding(0,0,12,0)};community.Margin=new Padding(0);profileButton.Dock=DockStyle.Fill;profileButton.Margin=new Padding(0,0,0,6);profileButton.Visible=false;credentials.Controls.Add(community);credentials.Controls.Add(profileButton);Field(fields,1,3,"Community / v3 profile",credentials); Field(fields,2,3,"Version (optional)",version); Field(fields,3,3,"UDP port",port); Field(fields,4,3,"Timeout (ms)",timeout); Field(fields,5,3,"Retries",retries);
+            Field(fields,0,3,"IPv4 subnet (CIDR)",range); var credentials=new Panel{Dock=DockStyle.Fill,Margin=new Padding(0,0,12,0)};community.Margin=new Padding(0);profileButton.Dock=DockStyle.Fill;profileButton.Margin=new Padding(0,0,0,6);profileButton.Visible=false;credentials.Controls.Add(community);credentials.Controls.Add(profileButton);Field(fields,1,3,"Community / v3 profile",credentials); Field(fields,2,3,"SNMP version",version); Field(fields,3,3,"UDP port",port); Field(fields,4,3,"Timeout (ms)",timeout); Field(fields,5,3,"Retries",retries);
             fields.Controls.Add(routed,0,5); tips.SetToolTip(routed,"For a routed network or a VPN with /32 addressing: scans only the entered CIDR through the selected adapter. Routing must support it.");
             fields.Controls.Add(show,1,5);
             fields.Controls.Add(profileNote,2,5);fields.SetColumnSpan(profileNote,4);
@@ -131,7 +132,7 @@ namespace SnmptoolRAV {
         void ClearValues() {values.Clear();data.Rows.Clear();value.Clear();dataDevice="";dataTab.Text="Device data";valueInfo.Text="Select a row to inspect its full value.";copyValue.Enabled=false;}
         void ClearResults() {results.Clear();ClearValues();devices.Rows.Clear();deviceTab.Text="Devices (0)";emptyDevices.Visible=true;UpdateSelected();}
         void UpdateProfileControls(){bool v3=version.SelectedIndex==3;community.Visible=show.Visible=!v3;profileButton.Visible=v3;profileButton.Text=v3Profile==null?"Configure v3...":"Edit v3 profile...";profileNote.Text=v3?(v3Profile==null?"Configure a v3 user, authentication and privacy profile. No community fallback.":"V3 only / "+v3Profile.Summary+". No fallback."):"Auto: v2c then v1. Community stays in memory; v1/v2c send it unencrypted.";tips.SetToolTip(profileNote,profileNote.Text);SetBusy(busy);}
-        void SetSettingsVisible(bool visible) {settingsVisible=visible;settings.Visible=visible;root.RowStyles[1].Height=visible?224:0;connectionToggle.Text=visible?"Hide connection settings":"Show connection settings";root.PerformLayout();}
+        void SetSettingsVisible(bool visible) {if(visible==settingsVisible)return;if(!visible)settingsHeight=root.RowStyles[1].Height;settingsVisible=visible;settings.Visible=visible;root.RowStyles[1].Height=visible?settingsHeight:0;connectionToggle.Text=visible?"Hide connection settings":"Show connection settings";root.PerformLayout();}
         void UpdateSelected() {var item=CurrentDevice();if(item==null || (!String.IsNullOrEmpty(dataDevice)&&dataDevice!=item.IP)){ClearValues();}selected.Text=item==null?"Select a discovered device first.":item.IP+"  /  "+(String.IsNullOrEmpty(item.Name)?item.Description:item.Name)+"  /  "+item.VersionText;tips.SetToolTip(selected,selected.Text);SetBusy(busy);}
         DeviceResult CurrentDevice() {return devices.SelectedRows.Count==0?null:devices.SelectedRows[0].Tag as DeviceResult;}
         void SetStatus(string text,bool success) {status.Text=text;status.ForeColor=success?Theme.Success:Theme.Muted;tips.SetToolTip(status,text);}
@@ -217,7 +218,10 @@ namespace SnmptoolRAV {
                 form.AddValue(new DataRow{Oid="1.3.6.1.2.1.1.1.0",Name="Description",Type="String",Value="Old adapter value"});form.dataDevice="192.168.1.42";form.value.Text="Old adapter value";
                 form.AdapterChanged();
                 if(form.value.Text.Length!=0||form.values.Count!=0||form.dataDevice.Length!=0||form.copyValue.Enabled||form.read.Enabled)throw new Exception("Changing adapter left stale values or actions.");
-                form.Hide();
+                form.ClientSize=new Size(1080,720);form.Scale(new SizeF(1.5f,1.5f));
+                float scaledHeight=form.root.RowStyles[1].Height;form.SetSettingsVisible(false);form.SetSettingsVisible(true);Application.DoEvents();
+                if(Math.Abs(form.root.RowStyles[1].Height-scaledHeight)>0.1f)throw new Exception("Toggling settings changed their scaled height.");
+                SavePreview(form,directory,"scaled-settings");form.Hide();
             }
         }
         static void SavePreview(MainForm form,string directory,string name){using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new Rectangle(0,0,image.Width,image.Height));image.Save(Path.Combine(directory,name+".png"),System.Drawing.Imaging.ImageFormat.Png);}}

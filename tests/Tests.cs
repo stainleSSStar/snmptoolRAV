@@ -80,6 +80,11 @@ static class Tests {
             var watch=Stopwatch.StartNew();cancel.CancelAfter(100);try{new SnmpClient(IPAddress.Loopback,0,agent.Port,5000).Query(IPAddress.Loopback,1,"test","1.3.6.1.2.1.1.1.0",false,cancel.Token);throw new Exception("Cancellation ignored");}catch(OperationCanceledException){}Check(watch.ElapsedMilliseconds<1500,"Cancellation interrupts a long receive timeout");
         }
         using(var agent=new Agent(r=>new byte[]{0x30,0x80})){Check(new SnmpClient(IPAddress.Loopback,0,agent.Port,150).Query(IPAddress.Loopback,1,"test","1.3.6.1.2.1.1.1.0",false,CancellationToken.None)==null,"Malformed replies do not crash receiver");}
+        using(var cancel=new CancellationTokenSource())using(var agent=new Agent(r=>{if(r.Values[0].Oid.EndsWith(".5.0")){cancel.Cancel();return null;}return Reply(r,r.Values[0].Oid,Text("Confirmed responder"));})){
+            var found=new List<DeviceResult>();
+            try{Scanner.Scan(new ScanOptions{Adapter=Loopback(),Range=IpRange.Parse("127.0.0.1/32",Loopback()),Community="test",Version=1,Port=agent.Port,Timeout=300,Workers=1},d=>found.Add(d),p=>{},cancel.Token);throw new Exception("Scan did not report cancellation");}catch(OperationCanceledException){}
+            Check(found.Count==1&&found[0].Description=="Confirmed responder"&&found[0].Status.Contains("stopped"),"Stopping optional name lookup preserves the confirmed SNMP responder");
+        }
     }
     static void WalkTests(){
         string[] oids={"1.3.6.1.2.1.1.1.0","1.3.6.1.2.1.1.5.0","1.3.6.1.2.1.2.1.0"};

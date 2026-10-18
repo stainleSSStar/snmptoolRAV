@@ -11,7 +11,7 @@ Download `snmptoolRAV.exe` from [Releases](https://github.com/stainleSSStar/snmp
 3. Enter **Community**. It is masked by default; **Show** reveals it. The app does not save it in configuration files, CSV exports, logs or release assets. Community-based SNMP v1/v2c transmits this name unencrypted on the selected network.
 4. Leave **Version** on **Auto** to try v2c, then v1 only if no matching response arrives, or explicitly choose either version. Select **SNMP v3** for a separate username/authentication/privacy profile. Auto tries only community-based v2c/v1; it never attempts or falls back from v3.
 5. Leave **UDP port** at 161 unless your device uses another port. Adjust reply timeout (100–5,000 ms) and retries (0–2 per version during discovery) if needed.
-6. Click **Scan subnet**. Requests are sent only after you click; starting the app only reads local adapter configuration. **Stop** cancels outstanding polling and preserves discovered devices.
+6. Click **Scan subnet**. Requests are sent only after you click; starting the app only reads local adapter configuration. **Stop** cancels outstanding polling and preserves discovered devices, including a confirmed responder whose optional name lookup is interrupted.
 
 The app sends read-only SNMP GET/GETNEXT requests, plus SNMPv3 engine discovery. It does not change device settings, use SET requests, select additional subnets automatically, require ping replies, change routes or install services. IPv4 packets are bound to the selected source address and Windows `IP_UNICAST_IF` interface index. A binding failure is shown rather than silently switching to another adapter. Routing/firewall restrictions on a virtual interface may still prevent access to devices.
 

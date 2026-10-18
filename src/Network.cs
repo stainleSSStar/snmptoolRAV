@@ -83,7 +83,10 @@ namespace SnmptoolRAV {
                                 try {
                                     var name = client.Query(ip,version,options.Community,"1.3.6.1.2.1.1.5.0",false,cancel);
                                     if (name != null && name.Error == 0 && name.Values[0].Value.Tag == 4) result.Name = name.Values[0].Value.Display();
-                                } catch (SocketException) { result.Status = "Responding; name unavailable"; }
+                                } catch (OperationCanceledException) { result.Status = "Responding; name lookup stopped"; }
+                                catch (SnmpSecurityException ex) { Interlocked.Increment(ref errors); result.Status = "Responding; name unavailable: " + ex.Status; }
+                                catch (SocketException) { Interlocked.Increment(ref errors); result.Status = "Responding; name unavailable"; }
+                                catch (FormatException) { Interlocked.Increment(ref errors); result.Status = "Responding; invalid name response"; }
                                 Interlocked.Increment(ref responders); found(result); break;
                             }
                         } catch (OperationCanceledException) { break; }
